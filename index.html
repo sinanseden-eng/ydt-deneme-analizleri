@@ -6,8 +6,12 @@
     <title>YDT AI Analizörü - Netlify App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
+        // PDF.js worker'ı yapılandırıyoruz
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        
         tailwind.config = {
             theme: {
                 extend: {
@@ -49,6 +53,15 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .drag-area {
+            border: 2px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        .drag-area.active {
+            border-color: #6366f1; /* Indigo-500 */
+            background-color: #eef2ff; /* Indigo-50 */
+        }
     </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
@@ -69,7 +82,7 @@
                     Arşivim
                 </button>
                 <button onclick="switchView('upload')" id="nav-add" class="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm">
-                    <i data-lucide="scan-text" class="w-4 h-4"></i> <span class="hidden sm:inline">Yeni Analiz Başlat</span>
+                    <i data-lucide="file-up" class="w-4 h-4"></i> <span class="hidden sm:inline">Yeni Analiz Başlat</span>
                 </button>
             </nav>
         </div>
@@ -84,9 +97,9 @@
                 </div>
                 <div class="relative z-10 max-w-2xl">
                     <h2 class="text-3xl font-bold mb-3">Gerçek Yapay Zeka Deneme Analizi</h2>
-                    <p class="text-indigo-200 mb-6 text-sm leading-relaxed">Gemini AI ve Netlify Backend entegrasyonu sayesinde, yapıştırdığınız metin saniyeler içinde taranır. Metnin gerçekten YDT olup olmadığı denetlenir; zorluğu hesaplanarak piyasadaki denemelerle eşleştirilir.</p>
+                    <p class="text-indigo-200 mb-6 text-sm leading-relaxed">Gemini AI ve Netlify Backend entegrasyonu sayesinde, PDF formatında yüklediğiniz denemeler saniyeler içinde okunur ve taranır. Metnin gerçekten YDT olup olmadığı denetlenir; zorluğu hesaplanarak piyasadaki denemelerle eşleştirilir.</p>
                     <button onclick="switchView('upload')" class="bg-indigo-500 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-400 transition-colors shadow-lg flex items-center gap-2">
-                        <i data-lucide="zap" class="w-5 h-5"></i> Hemen Deneme Analiz Et
+                        <i data-lucide="zap" class="w-5 h-5"></i> Hemen PDF Analizi Başlat
                     </button>
                 </div>
             </div>
@@ -120,46 +133,79 @@
                 <div id="empty-state" class="hidden glass-panel rounded-3xl p-12 text-center">
                     <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400"><i data-lucide="database" class="w-10 h-10"></i></div>
                     <h3 class="text-lg font-bold text-slate-700 mb-2">Henüz analiz edilmiş deneme yok</h3>
-                    <p class="text-slate-500 mb-6 max-w-md mx-auto">Sisteme bir deneme metni yapıştırarak gerçek yapay zeka analizini başlatın.</p>
+                    <p class="text-slate-500 mb-6 max-w-md mx-auto">Sisteme bir deneme PDF'i yükleyerek gerçek yapay zeka analizini başlatın.</p>
                 </div>
                 <div id="exam-list" class="grid grid-cols-1 gap-4"></div>
             </div>
         </div>
 
         <div id="view-upload" class="hidden fade-in max-w-3xl mx-auto mt-4">
-            <div class="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden flex flex-col h-[75vh]">
+            <div class="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden flex flex-col">
                 <div class="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
                     <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                         <i data-lucide="scan" class="w-5 h-5 text-indigo-600"></i> Yeni YDT Denemesi
                     </h2>
                 </div>
 
-                <div class="p-6 flex-grow flex flex-col overflow-y-auto">
+                <div class="p-6 flex-grow flex flex-col">
                     <div class="mb-4 shrink-0">
                         <label class="block text-sm font-semibold text-slate-700 mb-2">Deneme Adı / Yayın Bilgisi</label>
                         <input type="text" id="upload-exam-name" placeholder="Örn: Dilko YDT Türkiye Geneli Deneme-3" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium">
                     </div>
 
-                    <div class="flex-grow flex flex-col mb-2">
-                        <div class="flex justify-between items-end mb-2">
-                            <label class="block text-sm font-semibold text-slate-700">Deneme Metni (Kopyala/Yapıştır)</label>
-                            <span class="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">Min. 200 karakter</span>
+                    <!-- PDF Drag and Drop Area -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Deneme PDF Dosyası</label>
+                        <div id="drag-area" class="drag-area flex flex-col items-center justify-center p-8 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors h-48 relative">
+                            <input type="file" id="pdf-upload" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="handleFileSelect(event)">
+                            
+                            <div id="upload-content" class="text-center pointer-events-none">
+                                <i data-lucide="file-text" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+                                <p class="text-slate-600 font-medium mb-1">PDF dosyasını buraya sürükleyin veya <span class="text-indigo-600">tıklayın</span></p>
+                                <p class="text-xs text-slate-400">Yalnızca YDT denemelerini içeren .pdf formatı desteklenir</p>
+                            </div>
+                            
+                            <div id="file-info" class="hidden text-center pointer-events-none w-full px-4">
+                                <div class="flex items-center justify-center gap-3 p-4 bg-white rounded-lg border border-slate-200 shadow-sm mx-auto w-full max-w-sm">
+                                    <div class="bg-indigo-50 text-indigo-600 p-2 rounded shrink-0">
+                                        <i data-lucide="file-check" class="w-6 h-6"></i>
+                                    </div>
+                                    <div class="text-left overflow-hidden w-full">
+                                        <p id="file-name" class="text-sm font-semibold text-slate-800 truncate">dosya_adi.pdf</p>
+                                        <p id="file-size" class="text-xs text-slate-500 mt-0.5">0 KB</p>
+                                    </div>
+                                    <button type="button" onclick="resetFileSelection(event)" class="text-slate-400 hover:text-rose-500 p-1 pointer-events-auto shrink-0 z-20">
+                                        <i data-lucide="x" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <textarea id="exam-text-content" placeholder="Analiz edilecek YDT denemesinin metnini (soruları, şıkları, okuma parçalarını) buraya yapıştırın. Yapay zeka metni inceleyip zorluğunu hesaplayacaktır..." class="w-full flex-grow p-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all resize-none text-sm text-slate-700"></textarea>
                     </div>
                     
+                    <!-- Progress Bar for PDF Processing -->
+                    <div id="pdf-progress-container" class="hidden mb-4">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-semibold text-indigo-600" id="pdf-status-text">PDF Okunuyor...</span>
+                            <span class="text-xs font-bold text-slate-500" id="pdf-percentage">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-2">
+                            <div id="pdf-progress-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+
                     <div id="input-error" class="hidden mb-4 p-4 bg-rose-50 text-rose-700 rounded-xl border border-rose-200 text-sm flex items-start gap-2">
                         <i data-lucide="alert-circle" class="w-5 h-5 shrink-0"></i>
                         <span id="input-error-msg" class="font-medium">Hata mesajı.</span>
                     </div>
 
-                    <button id="start-analysis-btn" onclick="startAIAnalysis()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 shrink-0">
+                    <button id="start-analysis-btn" onclick="startAIAnalysis()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled>
                         <i data-lucide="cpu" class="w-5 h-5"></i> Gemini AI Analizini Başlat
                     </button>
                 </div>
             </div>
         </div>
 
+        <!-- Processing View -->
         <div id="view-processing" class="hidden fade-in max-w-lg mx-auto mt-20 text-center">
             <div class="relative w-24 h-24 mx-auto mb-6 flex items-center justify-center">
                 <div class="loader-spinner absolute"></div>
@@ -167,9 +213,10 @@
             </div>
             
             <h2 class="text-2xl font-bold text-slate-800 mb-2">Yapay Zeka Metni İnceliyor...</h2>
-            <p id="processing-text" class="text-slate-500 font-medium">Bu işlem metnin uzunluğuna bağlı olarak 5-15 saniye sürebilir.</p>
+            <p id="processing-text" class="text-slate-500 font-medium">Bu işlem PDF'in uzunluğuna bağlı olarak 5-20 saniye sürebilir.</p>
         </div>
 
+        <!-- Result View -->
         <div id="view-result" class="hidden fade-in max-w-4xl mx-auto space-y-6">
             <div class="flex items-center justify-between mb-2">
                 <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -236,6 +283,7 @@
 
         let exams = [];
         let pendingExam = null;
+        let extractedText = "";
 
         // Netlify Backend Endpoint'i (Serverless Function)
         const API_URL = '/.netlify/functions/analyze'; 
@@ -246,14 +294,162 @@
             processing: document.getElementById('view-processing'),
             result: document.getElementById('view-result')
         };
-        const navDashboard = document.getElementById('nav-dashboard');
+        
+        const dragArea = document.getElementById('drag-area');
+        const fileInput = document.getElementById('pdf-upload');
+        const startAnalysisBtn = document.getElementById('start-analysis-btn');
 
         function init() {
             lucide.createIcons();
             loadExams();
             updateDashboard();
+            setupDragAndDrop();
         }
 
+        // --- Drag and Drop Logic ---
+        function setupDragAndDrop() {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dragArea.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dragArea.addEventListener(eventName, () => dragArea.classList.add('active'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dragArea.addEventListener(eventName, () => dragArea.classList.remove('active'), false);
+            });
+
+            dragArea.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files && files.length > 0) {
+                    fileInput.files = files; // Update input
+                    handleFileSelect({ target: { files: files } });
+                }
+            }, false);
+        }
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            const errorBox = document.getElementById('input-error');
+            const errorMsg = document.getElementById('input-error-msg');
+            
+            if (!file) return;
+
+            if (file.type !== 'application/pdf') {
+                errorMsg.textContent = "Lütfen sadece PDF (.pdf) formatında bir dosya yükleyin.";
+                errorBox.classList.remove('hidden');
+                resetFileSelection(event);
+                return;
+            }
+
+            errorBox.classList.add('hidden');
+            
+            // Show File Info UI
+            document.getElementById('upload-content').classList.add('hidden');
+            document.getElementById('file-info').classList.remove('hidden');
+            document.getElementById('file-name').textContent = file.name;
+            document.getElementById('file-size').textContent = formatBytes(file.size);
+            
+            // Automatically fill the exam name if it's empty
+            const nameInput = document.getElementById('upload-exam-name');
+            if(!nameInput.value) {
+                nameInput.value = file.name.replace('.pdf', '');
+            }
+
+            await extractTextFromPDF(file);
+        }
+
+        function resetFileSelection(e) {
+            if(e) { e.preventDefault(); e.stopPropagation(); }
+            fileInput.value = '';
+            extractedText = "";
+            document.getElementById('upload-content').classList.remove('hidden');
+            document.getElementById('file-info').classList.add('hidden');
+            startAnalysisBtn.disabled = true;
+            startAnalysisBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            document.getElementById('pdf-progress-container').classList.add('hidden');
+        }
+
+        // --- PDF Processing ---
+        async function extractTextFromPDF(file) {
+            const progressContainer = document.getElementById('pdf-progress-container');
+            const progressBar = document.getElementById('pdf-progress-bar');
+            const progressText = document.getElementById('pdf-percentage');
+            const statusText = document.getElementById('pdf-status-text');
+            
+            progressContainer.classList.remove('hidden');
+            startAnalysisBtn.disabled = true;
+            startAnalysisBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            statusText.textContent = "PDF Hazırlanıyor...";
+            progressBar.style.width = "0%";
+            progressText.textContent = "0%";
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                let fullText = "";
+                
+                statusText.textContent = "Sayfalar Taranıyor...";
+                
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(" ");
+                    fullText += pageText + "\n\n";
+                    
+                    const percent = Math.round((i / pdf.numPages) * 100);
+                    progressBar.style.width = `${percent}%`;
+                    progressText.textContent = `${percent}%`;
+                }
+
+                extractedText = fullText.trim();
+                
+                if (extractedText.length < 150) {
+                     throw new Error("PDF'den yeterli metin okunamadı (Görsel ağırlıklı veya taranmış bir PDF olabilir).");
+                }
+                
+                statusText.textContent = "Okuma Tamamlandı!";
+                statusText.classList.replace('text-indigo-600', 'text-emerald-600');
+                progressBar.classList.replace('bg-indigo-500', 'bg-emerald-500');
+                
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                    statusText.classList.replace('text-emerald-600', 'text-indigo-600');
+                    progressBar.classList.replace('bg-emerald-500', 'bg-indigo-500');
+                    
+                    // Enable start button
+                    startAnalysisBtn.disabled = false;
+                    startAnalysisBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }, 1500);
+                
+            } catch (error) {
+                console.error("PDF Okuma Hatası:", error);
+                const errorBox = document.getElementById('input-error');
+                document.getElementById('input-error-msg').textContent = error.message || "PDF okunurken bir hata oluştu. Taranmış sayfalar yerine dijital kopyalar deneyin.";
+                errorBox.classList.remove('hidden');
+                resetFileSelection();
+                progressContainer.classList.add('hidden');
+            }
+        }
+
+
+        // --- App Logic ---
         function loadExams() {
             const saved = localStorage.getItem('ydtAIGeminiExams');
             if(saved) {
@@ -274,26 +470,28 @@
             void views[viewName].offsetWidth;
             views[viewName].classList.add('fade-in');
 
+            const navDashboard = document.getElementById('nav-dashboard');
             if(viewName === 'dashboard') {
                 navDashboard.classList.replace('bg-slate-200', 'bg-slate-300');
                 updateDashboard();
             } else {
                 navDashboard.classList.replace('bg-slate-300', 'bg-slate-200');
                 document.getElementById('input-error').classList.add('hidden');
+                resetFileSelection();
+                document.getElementById('upload-exam-name').value = '';
             }
             lucide.createIcons();
         }
 
         async function startAIAnalysis() {
             let examName = document.getElementById('upload-exam-name').value.trim();
-            let examText = document.getElementById('exam-text-content').value.trim();
             const errorBox = document.getElementById('input-error');
             const errorMsg = document.getElementById('input-error-msg');
             
             if(!examName) examName = "İsimsiz YDT Denemesi";
 
-            if(examText.length < 150) {
-                errorMsg.textContent = "Hata: Metin çok kısa. Lütfen geçerli bir deneme (en az 1-2 sayfa) kopyalayıp yapıştırın.";
+            if(!extractedText || extractedText.length < 150) {
+                errorMsg.textContent = "Önce analiz edilecek geçerli bir PDF dosyası yüklemelisiniz.";
                 errorBox.classList.remove('hidden');
                 return;
             }
@@ -301,8 +499,8 @@
             errorBox.classList.add('hidden');
             switchView('processing');
 
-            // Send only the text to the backend. The backend handles the secret key and prompt.
-            const payload = { text: examText };
+            // Payload for the Netlify Backend
+            const payload = { text: extractedText };
 
             try {
                 const response = await fetch(API_URL, {
@@ -311,13 +509,13 @@
                     body: JSON.stringify(payload)
                 });
 
-                if(!response.ok) throw new Error("Sunucu Bağlantı Hatası");
+                if(!response.ok) throw new Error("Sunucu Bağlantı Hatası veya API Hatası");
                 
                 const aiData = await response.json();
                 
                 if(!aiData.isValid) {
                     switchView('upload');
-                    errorMsg.textContent = "Yapay Zeka Reddi: " + (aiData.errorMessage || "Bu metin bir İngilizce sınav formuna uymuyor.");
+                    errorMsg.textContent = "Yapay Zeka Reddi: " + (aiData.errorMessage || "Bu metin bir İngilizce YDT sınav formuna uymuyor.");
                     errorBox.classList.remove('hidden');
                     return;
                 }
@@ -339,7 +537,7 @@
             } catch (error) {
                 console.error(error);
                 switchView('upload');
-                errorMsg.textContent = "Netlify Fonksiyonuna ulaşılamadı. Lütfen internet bağlantınızı ve Github/Netlify kurulumunu kontrol edin.";
+                errorMsg.textContent = "Netlify Fonksiyonuna ulaşılamadı veya zaman aşımına uğradı. Lütfen GitHub/Netlify kurulumunu kontrol edin.";
                 errorBox.classList.remove('hidden');
             }
         }
@@ -393,10 +591,6 @@
                 exams.unshift(pendingExam);
                 saveExams();
                 pendingExam = null;
-                
-                document.getElementById('upload-exam-name').value = '';
-                document.getElementById('exam-text-content').value = '';
-                
                 switchView('dashboard');
             }
         }
@@ -439,13 +633,19 @@
             document.getElementById('stat-hardest-section').textContent = hardestDef ? hardestDef.name : "-";
 
             listContainer.innerHTML = '';
-            exams.forEach(ex => {
+            exams.forEach((ex, index) => {
                 const style = getDifficultyStyle(ex.overallScore);
                 
                 const html = `
-                    <div class="glass-panel p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 ${style.border.replace('border-', 'border-l-')} hover:shadow-md transition-shadow">
+                    <div class="glass-panel p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 ${style.border.replace('border-', 'border-l-')} hover:shadow-md transition-shadow relative group">
+                        
+                        <!-- Silme Butonu (Hover'da Çıkar) -->
+                        <button onclick="deleteExam(${index})" class="absolute top-2 right-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-2" title="Arşivden Sil">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+
                         <div>
-                            <h3 class="font-bold text-slate-800 text-lg">${ex.name}</h3>
+                            <h3 class="font-bold text-slate-800 text-lg pr-8">${ex.name}</h3>
                             <div class="flex items-center gap-2 mt-2 flex-wrap">
                                 <span class="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded border border-slate-200 flex items-center gap-1">
                                     <i data-lucide="tag" class="w-3 h-3"></i> ${ex.marketEq || 'Analiz'}
@@ -455,7 +655,7 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-4 shrink-0">
+                        <div class="flex items-center gap-4 shrink-0 mt-2 md:mt-0 md:mr-6">
                             <div class="text-right">
                                 <div class="text-2xl font-black text-slate-800">${ex.overallScore.toFixed(1)}</div>
                                 <div class="text-[10px] uppercase font-bold tracking-widest ${style.color}">${style.text}</div>
@@ -466,6 +666,15 @@
                 listContainer.insertAdjacentHTML('beforeend', html);
             });
             lucide.createIcons();
+        }
+
+        // Add a function to delete items from the dashboard
+        function deleteExam(index) {
+            if (confirm("Bu analizi arşivden silmek istediğinize emin misiniz?")) {
+                exams.splice(index, 1);
+                saveExams();
+                updateDashboard();
+            }
         }
 
         document.addEventListener('DOMContentLoaded', init);
