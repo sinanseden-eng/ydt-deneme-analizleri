@@ -1,16 +1,17 @@
 exports.handler = async function (event, context) {
-  // Sadece POST isteklerini kabul et
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Yalnızca POST isteklerine izin verilir" };
   }
 
   try {
-    const { text } = JSON.parse(event.body);
+    const bodyData = JSON.parse(event.body);
+    const { text, pdfData, mimeType } = bodyData;
     
-    if (!text || text.length < 50) {
+    // Hem metin hem de PDF verisi yoksa hata ver
+    if ((!text || text.length < 50) && !pdfData) {
         return { 
             statusCode: 400, 
-            body: JSON.stringify({ error: "Lütfen analiz için geçerli bir metin gönderin." }) 
+            body: JSON.stringify({ error: "Lütfen analiz için geçerli bir metin veya PDF dosyası gönderin." }) 
         };
     }
 
@@ -25,9 +26,9 @@ exports.handler = async function (event, context) {
 
     // YDT Analiz Promptu (Güvenlik için backend'de saklanıyor)
     const systemPrompt = `Sen uzman bir YDT (Yabancı Dil Testi) ve İngilizce eğitim analistisin.
-    Görev: Sana verilen metni incelemek ve zorluk derecesini analiz etmektir.
+    Görev: Sana verilen metni veya belgeyi incelemek ve zorluk derecesini analiz etmektir. Belge taranmış bir PDF veya resim olabilir, içeriğini dikkatle oku.
     KURALLAR:
-    1. Önce metnin gerçekten bir İngilizce testi, makale veya YDT denemesi olup olmadığını kontrol et. Eğer Türkçe bir şiir, ilgisiz bir makale veya çok kısa saçma bir metinse "isValid" değerini false yap ve "errorMessage" kısmına neden reddettiğini kibarca açıkla (Örn: "Bu metin YDT soru formatına uymuyor.").
+    1. Önce içeriğin gerçekten bir İngilizce testi, makale veya YDT denemesi olup olmadığını kontrol et. Eğer Türkçe bir şiir, ilgisiz bir makale veya çok kısa saçma bir metinse "isValid" değerini false yap ve "errorMessage" kısmına neden reddettiğini kibarca açıkla (Örn: "Bu metin YDT soru formatına uymuyor.").
     2. Eğer metin İngilizce bir test/deneme ise "isValid" değerini true yap.
     3. Metni analiz et ve şu 4 kategori için 1.0 ile 10.0 arasında (örn: 7.5) zorluk puanı ver:
        - vocab: Kelime dağarcığı zorluğu (CEFR B2/C1 yoğunluğu)
@@ -67,8 +68,26 @@ exports.handler = async function (event, context) {
     // Google Gemini API'ye İstek Atma
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
     
+    // Request Payload'ını dinamik olarak oluşturuyoruz
+    let payloadParts = [];
+    
+    // Eğer PDF verisi (Base64) geldiyse, part olarak ekle
+    if (pdfData && mimeType) {
+        payloadParts.push({
+            inlineData: {
+                data: pdfData.split(',')[1], // "data:application/pdf;base64," kısmını at
+                mimeType: mimeType
+            }
+        });
+        payloadParts.push({ text: "Analiz Edilecek Belge yukarıdadır. Lütfen taranmış sayfaları dikkatlice oku ve analiz et." });
+    } 
+    // Eğer sadece düz metin geldiyse
+    else if (text) {
+        payloadParts.push({ text: `Analiz Edilecek Metin:\n\n${text}` });
+    }
+
     const payload = {
-      contents: [{ parts: [{ text: `Analiz Edilecek Metin:\n\n${text}` }] }],
+      contents: [{ parts: payloadParts }],
       systemInstruction: { parts: [{ text: systemPrompt }] },
       generationConfig: generationConfig
     };
