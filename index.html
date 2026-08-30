@@ -1,686 +1,137 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YDT AI Analizörü - Netlify App</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: {
-                        primary: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' },
-                    }
-                }
-            }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="YDT denemelerini son beş ÖSYM sınavına göre analiz eden eğitimsel zorluk ölçüm aracı.">
+  <title>YDT Analiz Laboratuvarı</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4/dist/tus.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['DM Sans', 'sans-serif'], display: ['Manrope', 'sans-serif'] },
+          colors: { ink: '#122033', ocean: '#0f4c5c', teal: '#0f8b8d', mint: '#e6f7f5', amber: '#f2a541', coral: '#e76f51', paper: '#f6f8f7' }
         }
-    </script>
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
-        
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(226, 232, 240, 0.8);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-        }
-        
-        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .loader-spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #0ea5e9;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .drag-area {
-            border: 2px dashed #cbd5e1;
-            transition: all 0.3s ease;
-        }
-        .drag-area.active {
-            border-color: #6366f1; /* Indigo-500 */
-            background-color: #eef2ff; /* Indigo-50 */
-        }
-    </style>
+      }
+    };
+  </script>
+  <style>
+    body { background: #f6f8f7; color: #122033; }
+    .display { font-family: 'Manrope', sans-serif; }
+    .panel { background: rgba(255,255,255,.94); border: 1px solid rgba(148,163,184,.22); box-shadow: 0 18px 50px rgba(15,76,92,.08); }
+    .grid-paper { background-image: linear-gradient(rgba(15,139,141,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(15,139,141,.05) 1px, transparent 1px); background-size: 28px 28px; }
+    .view-enter { animation: enter .35s ease-out both; }
+    @keyframes enter { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+    .drop-active { border-color: #0f8b8d !important; background: #e6f7f5 !important; transform: translateY(-1px); }
+    .score-ring { transition: stroke-dasharray 1s cubic-bezier(.4,0,.2,1); }
+    .progress-fill { transition: width .45s ease; }
+    .metric-fill { width: 0; transition: width .8s cubic-bezier(.4,0,.2,1); }
+    ::selection { background: #b8ebe5; color: #122033; }
+  </style>
 </head>
-<body class="antialiased min-h-screen flex flex-col">
+<body class="min-h-screen antialiased">
+  <header class="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+      <button class="flex items-center gap-3 text-left" data-nav="dashboard" aria-label="Ana sayfa">
+        <span class="grid h-11 w-11 place-items-center rounded-2xl bg-ocean text-white shadow-lg shadow-ocean/15"><i data-lucide="scan-search" class="h-6 w-6"></i></span>
+        <span><span class="display block text-lg font-extrabold tracking-tight">YDT Analiz Lab</span><span class="block text-[10px] font-bold uppercase tracking-[.2em] text-teal">ÖSYM Kalibrasyonlu</span></span>
+      </button>
+      <nav class="flex items-center gap-1 rounded-xl bg-slate-100 p-1" aria-label="Ana menü">
+        <button data-nav="dashboard" class="nav-btn rounded-lg px-3 py-2 text-sm font-bold text-slate-600 hover:bg-white">Arşiv</button>
+        <button data-nav="method" class="nav-btn hidden rounded-lg px-3 py-2 text-sm font-bold text-slate-600 hover:bg-white sm:block">Yöntem</button>
+        <button data-nav="upload" class="rounded-lg bg-ocean px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal"><span class="inline-flex items-center gap-2"><i data-lucide="plus" class="h-4 w-4"></i><span class="hidden sm:inline">Yeni analiz</span></span></button>
+      </nav>
+    </div>
+  </header>
 
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-            <div class="flex items-center gap-3 cursor-pointer" onclick="switchView('dashboard')">
-                <div class="p-2 bg-indigo-600 text-white rounded-xl relative overflow-hidden shadow-md">
-                    <i data-lucide="brain-circuit" class="w-6 h-6 relative z-10"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold text-slate-800 tracking-tight">YDT AI <span class="text-indigo-600">Core</span></h1>
-                    <p class="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">Netlify Serverless Engine</p>
-                </div>
-            </div>
-            <nav class="flex gap-2">
-                <button onclick="switchView('dashboard')" id="nav-dashboard" class="px-4 py-2 text-sm font-bold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors">
-                    Arşivim
-                </button>
-                <button onclick="switchView('upload')" id="nav-add" class="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm">
-                    <i data-lucide="file-up" class="w-4 h-4"></i> <span class="hidden sm:inline">Yeni Analiz Başlat</span>
-                </button>
-            </nav>
+  <main class="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
+    <section id="view-dashboard" class="app-view view-enter space-y-7">
+      <div class="grid-paper relative overflow-hidden rounded-[2rem] bg-ink px-6 py-8 text-white sm:px-9 sm:py-10">
+        <div class="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-teal/25 blur-3xl"></div>
+        <div class="relative max-w-3xl">
+          <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-mint"><i data-lucide="shield-check" class="h-4 w-4"></i> Tahmini zorluk • gizli ve geçici PDF işleme</div>
+          <h1 class="display text-3xl font-extrabold leading-tight sm:text-5xl">Bir denemenin zor olduğunu söylemek kolay. <span class="text-[#68d5ca]">Neden zor olduğunu ölçelim.</span></h1>
+          <p class="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">Kelime, dilbilgisi, okuma, soru becerileri, çeldiriciler ve zaman baskısı; 2022–2026 ÖSYM YDT çıpalarına göre birlikte değerlendirilir.</p>
+          <button data-nav="upload" class="mt-6 inline-flex items-center gap-2 rounded-xl bg-amber px-5 py-3 font-bold text-ink shadow-lg shadow-black/10 hover:bg-[#ffc067]"><i data-lucide="file-up" class="h-5 w-5"></i> PDF analizine başla</button>
         </div>
-    </header>
+      </div>
 
-    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full relative">
+      <div class="grid gap-4 sm:grid-cols-3">
+        <div class="panel rounded-2xl p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-500">Arşivdeki analiz</p><p id="stat-count" class="display mt-2 text-3xl font-extrabold">0</p></div>
+        <div class="panel rounded-2xl p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-500">Ortalama zorluk</p><p id="stat-average" class="display mt-2 text-3xl font-extrabold">—</p></div>
+        <div class="panel rounded-2xl p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-500">En sık düzey</p><p id="stat-label" class="display mt-2 text-3xl font-extrabold">—</p></div>
+      </div>
 
-        <div id="view-dashboard" class="fade-in space-y-6">
-            <div class="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-                <div class="absolute top-0 right-0 -mt-10 -mr-10 text-indigo-500 opacity-20 pointer-events-none">
-                    <i data-lucide="cpu" class="w-64 h-64"></i>
-                </div>
-                <div class="relative z-10 max-w-2xl">
-                    <h2 class="text-3xl font-bold mb-3">Gerçek Yapay Zeka Deneme Analizi</h2>
-                    <p class="text-indigo-200 mb-6 text-sm leading-relaxed">Gemini AI ve Netlify Backend entegrasyonu sayesinde, PDF formatında yüklediğiniz denemeler saniyeler içinde okunur ve taranır. Metnin gerçekten YDT olup olmadığı denetlenir; zorluğu hesaplanarak piyasadaki denemelerle eşleştirilir.</p>
-                    <button onclick="switchView('upload')" class="bg-indigo-500 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-400 transition-colors shadow-lg flex items-center gap-2">
-                        <i data-lucide="zap" class="w-5 h-5"></i> Hemen PDF Analizi Başlat
-                    </button>
-                </div>
-            </div>
+      <div>
+        <div class="mb-4 flex items-end justify-between gap-4"><div><p class="text-xs font-bold uppercase tracking-[.18em] text-teal">Yerel arşiv</p><h2 class="display mt-1 text-2xl font-extrabold">Sonuçlarım</h2></div><p class="hidden text-xs text-slate-500 sm:block">Yalnızca türetilmiş sonuçlar bu tarayıcıda saklanır.</p></div>
+        <div id="archive-empty" class="panel rounded-3xl px-6 py-12 text-center"><span class="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-mint text-teal"><i data-lucide="flask-conical" class="h-8 w-8"></i></span><h3 class="display mt-4 text-lg font-extrabold">Henüz analiz yok</h3><p class="mx-auto mt-2 max-w-md text-sm text-slate-500">İlk YDT denemeni yüklediğinde karşılaştırmalı sonuç burada görünecek.</p></div>
+        <div id="archive-list" class="hidden grid gap-3"></div>
+      </div>
+    </section>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><i data-lucide="file-check" class="w-6 h-6"></i></div>
-                    <div>
-                        <p class="text-sm text-slate-500 font-medium">Analiz Edilen Deneme</p>
-                        <h3 class="text-2xl font-bold text-slate-800" id="stat-total-exams">0</h3>
-                    </div>
-                </div>
-                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0"><i data-lucide="bar-chart" class="w-6 h-6"></i></div>
-                    <div>
-                        <p class="text-sm text-slate-500 font-medium">Ortalama Zorluk Seviyesi</p>
-                        <h3 class="text-2xl font-bold text-slate-800" id="stat-avg-difficulty">0.0 <span class="text-sm font-normal text-slate-400">/ 10</span></h3>
-                    </div>
-                </div>
-                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><i data-lucide="target" class="w-6 h-6"></i></div>
-                    <div>
-                        <p class="text-sm text-slate-500 font-medium">En Zor Bölüm (Genel)</p>
-                        <h3 class="text-lg font-bold text-slate-800 leading-tight" id="stat-hardest-section">-</h3>
-                    </div>
-                </div>
-            </div>
+    <section id="view-upload" class="app-view hidden view-enter">
+      <div class="mx-auto max-w-3xl">
+        <div class="mb-6"><button data-nav="dashboard" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-ink"><i data-lucide="arrow-left" class="h-4 w-4"></i> Arşive dön</button><p class="text-xs font-bold uppercase tracking-[.18em] text-teal">Yeni analiz</p><h1 class="display mt-1 text-3xl font-extrabold">Deneme dosyalarını hazırla</h1><p class="mt-2 text-sm text-slate-500">PDF zorunludur. XLSX veya CSV cevap anahtarı isteğe bağlıdır; PDF içindeki anahtar da okunabilir.</p></div>
+        <form id="analysis-form" class="panel space-y-6 rounded-3xl p-5 sm:p-7">
+          <div class="grid gap-5 sm:grid-cols-2">
+            <label class="block"><span class="mb-2 block text-sm font-bold">Deneme adı</span><input id="exam-name" maxlength="140" required placeholder="Örn. YDS Publishing Deneme 4" class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-teal focus:ring-4 focus:ring-teal/10"></label>
+            <label class="block"><span class="mb-2 block text-sm font-bold">Öğretmen erişim kodu</span><input id="access-code" type="password" required autocomplete="current-password" placeholder="••••••••" class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-teal focus:ring-4 focus:ring-teal/10"></label>
+          </div>
+          <div><div class="mb-2 flex items-center justify-between"><span class="text-sm font-bold">YDT PDF</span><span class="text-xs font-semibold text-slate-400">En fazla 50 MB</span></div><label id="pdf-drop" class="group block cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-7 text-center transition hover:border-teal hover:bg-mint/60"><input id="pdf-file" type="file" accept="application/pdf,.pdf" class="sr-only" required><span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-teal shadow-sm"><i data-lucide="file-text" class="h-7 w-7"></i></span><span id="pdf-label" class="mt-3 block text-sm font-bold">PDF’yi seç veya buraya bırak</span><span id="pdf-detail" class="mt-1 block text-xs text-slate-500">Taranmış ve metin tabanlı PDF’ler desteklenir.</span></label></div>
+          <div><div class="mb-2 flex items-center justify-between"><span class="text-sm font-bold">Harici cevap anahtarı <span class="font-normal text-slate-400">(isteğe bağlı)</span></span><span class="text-xs font-semibold text-slate-400">XLSX veya CSV • 2 MB</span></div><label id="key-drop" class="group flex cursor-pointer items-center gap-4 rounded-2xl border border-slate-300 bg-white p-4 transition hover:border-teal"><input id="key-file" type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr-only"><span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-mint text-teal"><i data-lucide="table-2" class="h-5 w-5"></i></span><span class="min-w-0"><span id="key-label" class="block truncate text-sm font-bold">Cevap anahtarı ekle</span><span id="key-detail" class="block text-xs text-slate-500">1–80 ve A–E eşleşmeleri doğrulanır.</span></span></label></div>
+          <div class="rounded-2xl border border-teal/15 bg-mint/60 p-4 text-sm leading-6 text-ocean"><div class="flex gap-3"><i data-lucide="lock-keyhole" class="mt-0.5 h-5 w-5 shrink-0"></i><p><strong>Dosya gizliliği:</strong> PDF özel depoya yüklenir, analizden sonra otomatik silinir. Sonuçlara soru metinleri kopyalanmaz.</p></div></div>
+          <div id="form-error" class="hidden rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700" role="alert"></div>
+          <button id="submit-btn" class="flex w-full items-center justify-center gap-2 rounded-xl bg-ocean px-5 py-4 font-bold text-white shadow-lg shadow-ocean/15 hover:bg-teal disabled:cursor-not-allowed disabled:opacity-50"><i data-lucide="scan-line" class="h-5 w-5"></i> Güvenli analizi başlat</button>
+        </form>
+      </div>
+    </section>
 
-            <div>
-                <h2 class="text-xl font-bold text-slate-800 mb-4">Analiz Arşivi</h2>
-                <div id="empty-state" class="hidden glass-panel rounded-3xl p-12 text-center">
-                    <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400"><i data-lucide="database" class="w-10 h-10"></i></div>
-                    <h3 class="text-lg font-bold text-slate-700 mb-2">Henüz analiz edilmiş deneme yok</h3>
-                    <p class="text-slate-500 mb-6 max-w-md mx-auto">Sisteme bir deneme PDF'i yükleyerek gerçek yapay zeka analizini başlatın.</p>
-                </div>
-                <div id="exam-list" class="grid grid-cols-1 gap-4"></div>
-            </div>
-        </div>
+    <section id="view-processing" class="app-view hidden view-enter"><div class="mx-auto max-w-2xl pt-8"><div class="panel rounded-3xl p-6 text-center sm:p-9"><div class="relative mx-auto grid h-24 w-24 place-items-center"><div class="absolute inset-0 animate-spin rounded-full border-4 border-mint border-t-teal"></div><i data-lucide="brain-circuit" class="h-10 w-10 text-ocean"></i></div><p class="mt-6 text-xs font-bold uppercase tracking-[.2em] text-teal">Arka plan analizi</p><h1 id="processing-title" class="display mt-2 text-2xl font-extrabold">Belge hazırlanıyor</h1><p id="processing-message" class="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-500">PDF özel depoya yükleniyor.</p><div class="mt-7 overflow-hidden rounded-full bg-slate-100"><div id="progress-bar" class="progress-fill h-3 rounded-full bg-gradient-to-r from-teal to-[#58cfc4]" style="width:4%"></div></div><div class="mt-2 flex justify-between text-xs font-bold text-slate-400"><span id="progress-stage">Yükleme</span><span id="progress-value">4%</span></div><div class="mt-7 grid grid-cols-4 gap-2 text-[11px] font-bold text-slate-400"><span id="step-upload" class="rounded-lg bg-mint px-2 py-2 text-teal">Yükle</span><span id="step-read" class="rounded-lg bg-slate-100 px-2 py-2">Oku</span><span id="step-check" class="rounded-lg bg-slate-100 px-2 py-2">Doğrula</span><span id="step-score" class="rounded-lg bg-slate-100 px-2 py-2">Puanla</span></div><p class="mt-6 text-xs text-slate-400">Sayfaların yoğunluğuna göre birkaç dakika sürebilir. Bu sekme açık kalabilir.</p></div></div></section>
 
-        <div id="view-upload" class="hidden fade-in max-w-3xl mx-auto mt-4">
-            <div class="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden flex flex-col">
-                <div class="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
-                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
-                        <i data-lucide="scan" class="w-5 h-5 text-indigo-600"></i> Yeni YDT Denemesi
-                    </h2>
-                </div>
+    <section id="view-result" class="app-view hidden view-enter space-y-6"><div class="flex flex-wrap items-center justify-between gap-3"><button data-nav="dashboard" class="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-ink"><i data-lucide="arrow-left" class="h-4 w-4"></i> Arşive dön</button><button data-nav="upload" class="inline-flex items-center gap-2 rounded-xl bg-ocean px-4 py-2 text-sm font-bold text-white hover:bg-teal"><i data-lucide="plus" class="h-4 w-4"></i> Yeni analiz</button></div><div id="result-root"></div></section>
 
-                <div class="p-6 flex-grow flex flex-col">
-                    <div class="mb-4 shrink-0">
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Deneme Adı / Yayın Bilgisi</label>
-                        <input type="text" id="upload-exam-name" placeholder="Örn: Dilko YDT Türkiye Geneli Deneme-3" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium">
-                    </div>
+    <section id="view-method" class="app-view hidden view-enter space-y-6"><div class="max-w-3xl"><p class="text-xs font-bold uppercase tracking-[.18em] text-teal">Şeffaf yöntem</p><h1 class="display mt-1 text-3xl font-extrabold">Puan nereden geliyor?</h1><p class="mt-3 text-sm leading-6 text-slate-500">Bu puan öğrencilerin gerçek başarısını değil, sınav belgesinin öngörülen dilsel ve bilişsel yükünü gösterir. Gerçek öğrenci verisi eklenirse ayrıca “gözlenen zorluk” hesaplanabilir.</p></div><div class="grid gap-4 md:grid-cols-2"><div class="panel rounded-3xl p-6"><h2 class="display text-xl font-extrabold">Sabit ağırlıklar</h2><div id="weight-list" class="mt-5 space-y-4"></div></div><div class="panel rounded-3xl p-6"><h2 class="display text-xl font-extrabold">ÖSYM çıpaları</h2><div id="reference-list" class="mt-5 space-y-3"></div></div></div><div class="panel rounded-3xl p-6"><h2 class="display text-xl font-extrabold">Dört zorluk bandı</h2><div class="mt-5 grid gap-3 sm:grid-cols-4"><div class="rounded-2xl bg-emerald-50 p-4"><strong class="text-emerald-700">Kolay</strong><p class="mt-1 text-xs text-slate-500">0–54</p></div><div class="rounded-2xl bg-sky-50 p-4"><strong class="text-sky-700">Orta</strong><p class="mt-1 text-xs text-slate-500">55–60</p></div><div class="rounded-2xl bg-amber-50 p-4"><strong class="text-amber-700">Orta-zor</strong><p class="mt-1 text-xs text-slate-500">61–67</p></div><div class="rounded-2xl bg-rose-50 p-4"><strong class="text-rose-700">Zor</strong><p class="mt-1 text-xs text-slate-500">68–100</p></div></div></div></section>
+  </main>
 
-                    <!-- PDF Drag and Drop Area -->
-                    <div class="mb-6">
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Deneme PDF Dosyası (Taranmış PDF'ler Desteklenir)</label>
-                        <div id="drag-area" class="drag-area flex flex-col items-center justify-center p-8 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors h-48 relative">
-                            <input type="file" id="pdf-upload" accept=".pdf,image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="handleFileSelect(event)">
-                            
-                            <div id="upload-content" class="text-center pointer-events-none">
-                                <i data-lucide="file-text" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
-                                <p class="text-slate-600 font-medium mb-1">PDF veya Resim dosyasını buraya sürükleyin veya <span class="text-indigo-600">tıklayın</span></p>
-                                <p class="text-xs text-slate-400">YDT denemelerini içeren .pdf, .jpg veya .png formatları desteklenir</p>
-                            </div>
-                            
-                            <div id="file-info" class="hidden text-center pointer-events-none w-full px-4">
-                                <div class="flex items-center justify-center gap-3 p-4 bg-white rounded-lg border border-slate-200 shadow-sm mx-auto w-full max-w-sm">
-                                    <div class="bg-indigo-50 text-indigo-600 p-2 rounded shrink-0">
-                                        <i data-lucide="file-check" class="w-6 h-6"></i>
-                                    </div>
-                                    <div class="text-left overflow-hidden w-full">
-                                        <p id="file-name" class="text-sm font-semibold text-slate-800 truncate">dosya_adi.pdf</p>
-                                        <p id="file-size" class="text-xs text-slate-500 mt-0.5">0 KB</p>
-                                    </div>
-                                    <button type="button" onclick="resetFileSelection(event)" class="text-slate-400 hover:text-rose-500 p-1 pointer-events-auto shrink-0 z-20">
-                                        <i data-lucide="x" class="w-4 h-4"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Progress Bar for PDF Processing -->
-                    <div id="pdf-progress-container" class="hidden mb-4">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="text-xs font-semibold text-indigo-600" id="pdf-status-text">PDF Okunuyor...</span>
-                            <span class="text-xs font-bold text-slate-500" id="pdf-percentage">0%</span>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-2">
-                            <div id="pdf-progress-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-                        </div>
-                    </div>
+  <footer class="mt-12 border-t border-slate-200 bg-white/70"><div class="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"><span>YDT Analiz Lab • Tahmini zorluk ölçümü</span><span>PDF içeriği analiz tamamlanınca silinir.</span></div></footer>
 
-                    <div id="input-error" class="hidden mb-4 p-4 bg-rose-50 text-rose-700 rounded-xl border border-rose-200 text-sm flex items-start gap-2">
-                        <i data-lucide="alert-circle" class="w-5 h-5 shrink-0"></i>
-                        <span id="input-error-msg" class="font-medium">Hata mesajı.</span>
-                    </div>
-
-                    <button id="start-analysis-btn" onclick="startAIAnalysis()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled>
-                        <i data-lucide="cpu" class="w-5 h-5"></i> Gemini AI Analizini Başlat
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Processing View -->
-        <div id="view-processing" class="hidden fade-in max-w-lg mx-auto mt-20 text-center">
-            <div class="relative w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                <div class="loader-spinner absolute"></div>
-                <i data-lucide="bot" class="w-10 h-10 text-indigo-600 relative z-10"></i>
-            </div>
-            
-            <h2 class="text-2xl font-bold text-slate-800 mb-2">Yapay Zeka Metni İnceliyor...</h2>
-            <p id="processing-text" class="text-slate-500 font-medium">Bu işlem PDF'in uzunluğuna bağlı olarak 5-20 saniye sürebilir.</p>
-        </div>
-
-        <!-- Result View -->
-        <div id="view-result" class="hidden fade-in max-w-4xl mx-auto space-y-6">
-            <div class="flex items-center justify-between mb-2">
-                <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    <i data-lucide="bar-chart-2" class="text-indigo-600"></i> AI Analiz Raporu
-                </h2>
-                <button onclick="saveAndGoToDashboard()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition-colors flex items-center gap-2">
-                    <i data-lucide="save" class="w-4 h-4"></i> Arşive Kaydet
-                </button>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Overall Score Card -->
-                <div class="md:col-span-1 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                    <h3 class="text-slate-500 font-semibold mb-4 uppercase tracking-wider text-sm" id="res-exam-name">Deneme Adı</h3>
-                    
-                    <div class="relative w-36 h-36 mb-4 flex items-center justify-center">
-                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                            <path class="text-slate-100" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            <path id="res-circle" class="text-indigo-500 transition-all duration-1000 ease-out" stroke-dasharray="0, 100" stroke-width="3" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        </svg>
-                        <div class="absolute flex flex-col items-center justify-center">
-                            <span class="text-4xl font-black text-slate-800" id="res-score">0.0</span>
-                            <span class="text-xs text-slate-400 font-bold">/ 10</span>
-                        </div>
-                    </div>
-                    
-                    <div id="res-label" class="text-sm font-bold uppercase tracking-wider px-3 py-1 rounded-md mb-4 bg-slate-100 text-slate-600">-</div>
-                    
-                    <div class="w-full bg-indigo-50 border border-indigo-100 rounded-xl p-4 mt-auto">
-                        <div class="text-xs text-indigo-400 font-semibold mb-1 uppercase tracking-wider">Piyasa Eşdeğeri:</div>
-                        <div class="font-bold text-indigo-700 text-sm" id="res-market">-</div>
-                    </div>
-                </div>
-
-                <!-- Detailed Section Scores -->
-                <div class="md:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Beceri & Zorluk Kırılımı</h3>
-                    <div class="space-y-5" id="res-sections">
-                        <!-- Bars injected via JS -->
-                    </div>
-                </div>
-            </div>
-            
-            <div class="bg-slate-800 rounded-2xl p-6 flex items-start gap-4 shadow-lg text-white">
-                <i data-lucide="sparkles" class="w-8 h-8 text-indigo-400 shrink-0 mt-0.5"></i>
-                <div>
-                    <h4 class="font-bold text-indigo-300 mb-1">Gemini Eğitim Koçu Yorumu</h4>
-                    <p class="text-sm text-slate-200 leading-relaxed" id="res-ai-comment">
-                        Yapay Zeka Yorumu yükleniyor...
-                    </p>
-                </div>
-            </div>
-        </div>
-
-    </main>
-
-    <script>
-        const sectionDefs = [
-            { id: "vocab", name: "Kelime & Phrasal Verbs", color: "blue" },
-            { id: "grammar", name: "Dilbilgisi & Tense", color: "indigo" },
-            { id: "reading", name: "Paragraf & Okuma Anlama", color: "rose" },
-            { id: "skills", name: "Çeviri, Diyalog & Tamamlama", color: "emerald" }
-        ];
-
-        let exams = [];
-        let pendingExam = null;
-        let fileBase64 = null;
-        let fileMimeType = null;
-
-        // Netlify Backend Endpoint'i (Serverless Function)
-        const API_URL = '/api/analyze';
-
-        const views = {
-            dashboard: document.getElementById('view-dashboard'),
-            upload: document.getElementById('view-upload'),
-            processing: document.getElementById('view-processing'),
-            result: document.getElementById('view-result')
-        };
-        
-        const dragArea = document.getElementById('drag-area');
-        const fileInput = document.getElementById('pdf-upload');
-        const startAnalysisBtn = document.getElementById('start-analysis-btn');
-
-        function init() {
-            lucide.createIcons();
-            loadExams();
-            updateDashboard();
-            setupDragAndDrop();
-        }
-
-        // --- Drag and Drop Logic ---
-        function setupDragAndDrop() {
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dragArea.addEventListener(eventName, preventDefaults, false);
-            });
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
-            ['dragenter', 'dragover'].forEach(eventName => {
-                dragArea.addEventListener(eventName, () => dragArea.classList.add('active'), false);
-            });
-
-            ['dragleave', 'drop'].forEach(eventName => {
-                dragArea.addEventListener(eventName, () => dragArea.classList.remove('active'), false);
-            });
-
-            dragArea.addEventListener('drop', (e) => {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                if (files && files.length > 0) {
-                    fileInput.files = files; // Update input
-                    handleFileSelect({ target: { files: files } });
-                }
-            }, false);
-        }
-
-        function formatBytes(bytes, decimals = 2) {
-            if (!+bytes) return '0 Bytes';
-            const k = 1024;
-            const dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-        }
-
-        async function handleFileSelect(event) {
-            const file = event.target.files[0];
-            const errorBox = document.getElementById('input-error');
-            const errorMsg = document.getElementById('input-error-msg');
-            
-            if (!file) return;
-
-            const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-            if (!validTypes.includes(file.type)) {
-                errorMsg.textContent = "Lütfen sadece PDF (.pdf) veya Resim (.jpg, .png) formatında bir dosya yükleyin.";
-                errorBox.classList.remove('hidden');
-                resetFileSelection(event);
-                return;
-            }
-
-            // Dosya boyutu kontrolü (50MB sınırı olarak güncellendi)
-            if (file.size > 50 * 1024 * 1024) {
-                errorMsg.textContent = "Dosya boyutu çok büyük (Max: 50MB). Lütfen daha küçük bir dosya yükleyin.";
-                errorBox.classList.remove('hidden');
-                resetFileSelection(event);
-                return;
-            }
-
-            errorBox.classList.add('hidden');
-            
-            // Show File Info UI
-            document.getElementById('upload-content').classList.add('hidden');
-            document.getElementById('file-info').classList.remove('hidden');
-            document.getElementById('file-name').textContent = file.name;
-            document.getElementById('file-size').textContent = formatBytes(file.size);
-            
-            // Automatically fill the exam name if it's empty
-            const nameInput = document.getElementById('upload-exam-name');
-            if(!nameInput.value) {
-                nameInput.value = file.name.replace(/\.[^/.]+$/, ""); // Uzantıyı gizle
-            }
-
-            await prepareFileForUpload(file);
-        }
-
-        function resetFileSelection(e) {
-            if(e) { e.preventDefault(); e.stopPropagation(); }
-            fileInput.value = '';
-            fileBase64 = null;
-            fileMimeType = null;
-            document.getElementById('upload-content').classList.remove('hidden');
-            document.getElementById('file-info').classList.add('hidden');
-            startAnalysisBtn.disabled = true;
-            startAnalysisBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            document.getElementById('pdf-progress-container').classList.add('hidden');
-        }
-
-        // --- File Preparation (Base64 Conversion) ---
-        async function prepareFileForUpload(file) {
-            const progressContainer = document.getElementById('pdf-progress-container');
-            const progressBar = document.getElementById('pdf-progress-bar');
-            const progressText = document.getElementById('pdf-percentage');
-            const statusText = document.getElementById('pdf-status-text');
-            
-            progressContainer.classList.remove('hidden');
-            startAnalysisBtn.disabled = true;
-            startAnalysisBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            statusText.textContent = "Dosya Yapay Zeka İçin Hazırlanıyor...";
-            progressBar.style.width = "50%";
-            progressText.textContent = "50%";
-            
-            try {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                
-                reader.onload = () => {
-                    fileBase64 = reader.result;
-                    fileMimeType = file.type;
-                    
-                    progressBar.style.width = "100%";
-                    progressText.textContent = "100%";
-                    statusText.textContent = "Dosya Hazır!";
-                    statusText.classList.replace('text-indigo-600', 'text-emerald-600');
-                    progressBar.classList.replace('bg-indigo-500', 'bg-emerald-500');
-                    
-                    setTimeout(() => {
-                        progressContainer.classList.add('hidden');
-                        statusText.classList.replace('text-emerald-600', 'text-indigo-600');
-                        progressBar.classList.replace('bg-emerald-500', 'bg-indigo-500');
-                        
-                        // Enable start button
-                        startAnalysisBtn.disabled = false;
-                        startAnalysisBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    }, 1000);
-                };
-                
-                reader.onerror = (error) => {
-                    throw new Error("Dosya okuma hatası.");
-                };
-                
-            } catch (error) {
-                console.error("Dosya Hazırlama Hatası:", error);
-                const errorBox = document.getElementById('input-error');
-                document.getElementById('input-error-msg').textContent = error.message || "Dosya hazırlanırken bir hata oluştu.";
-                errorBox.classList.remove('hidden');
-                resetFileSelection();
-                progressContainer.classList.add('hidden');
-            }
-        }
-
-        // --- App Logic ---
-        function loadExams() {
-            const saved = localStorage.getItem('ydtAIGeminiExams');
-            if(saved) {
-                try { exams = JSON.parse(saved); } catch(e) {}
-            }
-        }
-
-        function saveExams() {
-            localStorage.setItem('ydtAIGeminiExams', JSON.stringify(exams));
-        }
-
-        function switchView(viewName) {
-            Object.keys(views).forEach(k => {
-                views[k].classList.add('hidden');
-                views[k].classList.remove('fade-in');
-            });
-            views[viewName].classList.remove('hidden');
-            void views[viewName].offsetWidth;
-            views[viewName].classList.add('fade-in');
-
-            const navDashboard = document.getElementById('nav-dashboard');
-            if(viewName === 'dashboard') {
-                navDashboard.classList.replace('bg-slate-200', 'bg-slate-300');
-                updateDashboard();
-            } else {
-                navDashboard.classList.replace('bg-slate-300', 'bg-slate-200');
-                document.getElementById('input-error').classList.add('hidden');
-                resetFileSelection();
-                document.getElementById('upload-exam-name').value = '';
-            }
-            lucide.createIcons();
-        }
-
-        async function startAIAnalysis() {
-            let examName = document.getElementById('upload-exam-name').value.trim();
-            const errorBox = document.getElementById('input-error');
-            const errorMsg = document.getElementById('input-error-msg');
-            
-            if(!examName) examName = "İsimsiz YDT Denemesi";
-
-            if(!fileBase64) {
-                errorMsg.textContent = "Önce analiz edilecek geçerli bir dosya yüklemelisiniz.";
-                errorBox.classList.remove('hidden');
-                return;
-            }
-
-            errorBox.classList.add('hidden');
-            switchView('processing');
-            
-            // Kullanıcıya bilgi ver
-            document.getElementById('processing-text').textContent = "Yapay Zeka Taranmış Belgeyi Okuyor. (Görsel analiz 20-30 saniye sürebilir, lütfen bekleyin...)";
-
-            // Payload for the Netlify Backend (Base64 Data)
-            const payload = { 
-                pdfData: fileBase64,
-                mimeType: fileMimeType
-            };
-
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if(!response.ok) throw new Error("Sunucu Bağlantı Hatası veya API Hatası");
-                
-                const aiData = await response.json();
-                
-                if(!aiData.isValid) {
-                    switchView('upload');
-                    errorMsg.textContent = "Yapay Zeka Reddi: " + (aiData.errorMessage || "Bu metin bir İngilizce YDT sınav formuna uymuyor.");
-                    errorBox.classList.remove('hidden');
-                    return;
-                }
-
-                pendingExam = {
-                    id: 'exam_' + Date.now(),
-                    timestamp: Date.now(),
-                    name: examName,
-                    scores: aiData.scores,
-                    overallScore: aiData.overallScore,
-                    marketEq: aiData.marketEq,
-                    hardest: aiData.hardestSection,
-                    comment: aiData.aiComment
-                };
-
-                renderResultView(pendingExam);
-                switchView('result');
-
-            } catch (error) {
-                console.error(error);
-                switchView('upload');
-                errorMsg.textContent = "Netlify Fonksiyonuna ulaşılamadı veya zaman aşımına uğradı. Lütfen GitHub/Netlify kurulumunu kontrol edin.";
-                errorBox.classList.remove('hidden');
-            }
-        }
-
-        function renderResultView(data) {
-            document.getElementById('res-exam-name').textContent = data.name;
-            document.getElementById('res-score').textContent = data.overallScore.toFixed(1);
-            document.getElementById('res-market').textContent = data.marketEq;
-            document.getElementById('res-ai-comment').textContent = data.comment;
-            
-            const circle = document.getElementById('res-circle');
-            const percent = (data.overallScore / 10) * 100;
-            setTimeout(() => {
-                circle.setAttribute('stroke-dasharray', `${percent}, 100`);
-            }, 100);
-
-            const label = document.getElementById('res-label');
-            const diff = getDifficultyStyle(data.overallScore);
-            label.textContent = diff.text;
-            label.className = `text-sm font-bold uppercase tracking-wider px-3 py-1 rounded-md mb-4 border ${diff.bg} ${diff.color} ${diff.border}`;
-            
-            const sectionsContainer = document.getElementById('res-sections');
-            sectionsContainer.innerHTML = '';
-
-            sectionDefs.forEach(sec => {
-                const score = data.scores[sec.id] || 0;
-                const barWidth = (score / 10) * 100;
-                let colorClass = `bg-${sec.color}-500`;
-
-                const html = `
-                    <div>
-                        <div class="flex justify-between text-sm font-semibold text-slate-700 mb-1">
-                            <span>${sec.name}</span>
-                            <span>${score.toFixed(1)} / 10</span>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                            <div class="${colorClass} h-2.5 rounded-full transition-all duration-1000" style="width: 0%" id="bar-${sec.id}"></div>
-                        </div>
-                    </div>
-                `;
-                sectionsContainer.insertAdjacentHTML('beforeend', html);
-                
-                setTimeout(() => {
-                    document.getElementById(`bar-${sec.id}`).style.width = `${barWidth}%`;
-                }, 200);
-            });
-        }
-
-        function saveAndGoToDashboard() {
-            if(pendingExam) {
-                exams.unshift(pendingExam);
-                saveExams();
-                pendingExam = null;
-                switchView('dashboard');
-            }
-        }
-
-        function getDifficultyStyle(score) {
-            const num = parseFloat(score);
-            if (num < 3.0) return { text: "Çok Kolay", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" };
-            if (num < 5.0) return { text: "Kolay", color: "text-lime-700", bg: "bg-lime-50", border: "border-lime-200" };
-            if (num < 7.0) return { text: "Orta", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" };
-            if (num < 8.5) return { text: "Zor", color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-200" };
-            return { text: "Çok Zor", color: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200" };
-        }
-
-        function updateDashboard() {
-            document.getElementById('stat-total-exams').textContent = exams.length;
-            const emptyState = document.getElementById('empty-state');
-            const listContainer = document.getElementById('exam-list');
-            
-            if(exams.length === 0) {
-                emptyState.classList.remove('hidden');
-                listContainer.innerHTML = '';
-                document.getElementById('stat-avg-difficulty').innerHTML = `0.0 <span class="text-sm font-normal text-slate-400">/ 10</span>`;
-                document.getElementById('stat-hardest-section').textContent = "-";
-                return;
-            }
-            
-            emptyState.classList.add('hidden');
-            
-            const avg = exams.reduce((s, e) => s + e.overallScore, 0) / exams.length;
-            document.getElementById('stat-avg-difficulty').innerHTML = `${avg.toFixed(1)} <span class="text-sm font-normal text-slate-400">/ 10</span>`;
-
-            const sectionTotals = { vocab: 0, grammar: 0, reading: 0, skills: 0 };
-            exams.forEach(ex => {
-                for (const [sec, score] of Object.entries(ex.scores)) {
-                    if(sectionTotals[sec] !== undefined) sectionTotals[sec] += score;
-                }
-            });
-            let hardestId = Object.keys(sectionTotals).reduce((a, b) => sectionTotals[a] > sectionTotals[b] ? a : b);
-            const hardestDef = sectionDefs.find(s => s.id === hardestId);
-            document.getElementById('stat-hardest-section').textContent = hardestDef ? hardestDef.name : "-";
-
-            listContainer.innerHTML = '';
-            exams.forEach((ex, index) => {
-                const style = getDifficultyStyle(ex.overallScore);
-                
-                const html = `
-                    <div class="glass-panel p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 ${style.border.replace('border-', 'border-l-')} hover:shadow-md transition-shadow relative group">
-                        
-                        <!-- Silme Butonu (Hover'da Çıkar) -->
-                        <button onclick="deleteExam(${index})" class="absolute top-2 right-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-2" title="Arşivden Sil">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                        </button>
-
-                        <div>
-                            <h3 class="font-bold text-slate-800 text-lg pr-8">${ex.name}</h3>
-                            <div class="flex items-center gap-2 mt-2 flex-wrap">
-                                <span class="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded border border-slate-200 flex items-center gap-1">
-                                    <i data-lucide="tag" class="w-3 h-3"></i> ${ex.marketEq || 'Analiz'}
-                                </span>
-                                <span class="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                                    En zor: ${ex.hardest}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4 shrink-0 mt-2 md:mt-0 md:mr-6">
-                            <div class="text-right">
-                                <div class="text-2xl font-black text-slate-800">${ex.overallScore.toFixed(1)}</div>
-                                <div class="text-[10px] uppercase font-bold tracking-widest ${style.color}">${style.text}</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                listContainer.insertAdjacentHTML('beforeend', html);
-            });
-            lucide.createIcons();
-        }
-
-        // Add a function to delete items from the dashboard
-        function deleteExam(index) {
-            if (confirm("Bu analizi arşivden silmek istediğinize emin misiniz?")) {
-                exams.splice(index, 1);
-                saveExams();
-                updateDashboard();
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', init);
-    </script>
+  <script>
+    const API={create:'/api/create-job',start:'/api/start-analysis',status:'/api/job-status'};
+    const ARCHIVE_KEY='ydtAnalyzerArchiveV2',ACTIVE_JOB_KEY='ydtAnalyzerActiveJobV2';
+    const WEIGHTS=[['Kelime & CEFR',20,'vocabulary'],['Dilbilgisi & Sözdizimi',15,'grammar'],['Okuma & Çıkarım',25,'reading'],['Soru Becerileri',15,'questionSkills'],['Çeldirici Kalitesi',20,'distractors'],['Zaman Baskısı',5,'timePressure']];
+    const REFERENCES=[[2022,55,'Orta'],[2023,57,'Orta'],[2024,61,'Orta-zor'],[2025,69,'Zor'],[2026,58,'Orta']];
+    const views=[...document.querySelectorAll('.app-view')];let pdfFile=null,keyFile=null,archive=loadArchive(),pollTimer=null;
+    function showView(name){views.forEach(view=>view.classList.add('hidden'));const target=document.getElementById(`view-${name}`);target.classList.remove('hidden');target.classList.remove('view-enter');void target.offsetWidth;target.classList.add('view-enter');document.querySelectorAll('.nav-btn').forEach(button=>button.classList.toggle('bg-white',button.dataset.nav===name));if(name==='dashboard')renderDashboard();window.scrollTo({top:0,behavior:'smooth'});lucide.createIcons();}
+    document.querySelectorAll('[data-nav]').forEach(button=>button.addEventListener('click',()=>showView(button.dataset.nav)));
+    function loadArchive(){try{return JSON.parse(localStorage.getItem(ARCHIVE_KEY)||'[]')}catch{return[]}}
+    function saveArchive(){localStorage.setItem(ARCHIVE_KEY,JSON.stringify(archive.slice(0,50)))}
+    function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
+    function formatDate(value){return new Intl.DateTimeFormat('tr-TR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value))}
+    function formatBytes(bytes){return bytes<1024*1024?`${(bytes/1024).toFixed(0)} KB`:`${(bytes/1024/1024).toFixed(1)} MB`}
+    function labelTone(label){return({'Kolay':'bg-emerald-50 text-emerald-700 border-emerald-200','Orta':'bg-sky-50 text-sky-700 border-sky-200','Orta-zor':'bg-amber-50 text-amber-700 border-amber-200','Zor':'bg-rose-50 text-rose-700 border-rose-200'})[label]||'bg-slate-50 text-slate-700 border-slate-200'}
+    function renderDashboard(){document.getElementById('stat-count').textContent=archive.length;const avg=archive.length?Math.round(archive.reduce((sum,item)=>sum+item.result.difficultyIndex,0)/archive.length):null;document.getElementById('stat-average').textContent=avg===null?'—':`${avg}/100`;const counts=archive.reduce((acc,item)=>{const label=item.result.difficultyLabel;acc[label]=(acc[label]||0)+1;return acc},{});document.getElementById('stat-label').textContent=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';const empty=document.getElementById('archive-empty'),list=document.getElementById('archive-list');empty.classList.toggle('hidden',archive.length>0);list.classList.toggle('hidden',archive.length===0);list.innerHTML=archive.map(item=>`<article class="panel flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-center sm:justify-between"><button class="archive-open min-w-0 text-left" data-id="${escapeHtml(item.id)}"><h3 class="display truncate text-lg font-extrabold">${escapeHtml(item.examName)}</h3><p class="mt-1 text-xs text-slate-500">${formatDate(item.createdAt)} • ${item.result.coverage.detectedQuestions}/80 soru</p></button><div class="flex items-center gap-3"><span class="rounded-lg border px-2.5 py-1 text-xs font-bold ${labelTone(item.result.difficultyLabel)}">${escapeHtml(item.result.difficultyLabel)}</span><span class="display text-2xl font-extrabold">${item.result.difficultyIndex}</span><button class="archive-delete rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" data-id="${escapeHtml(item.id)}" aria-label="Analizi sil"><i data-lucide="trash-2" class="h-4 w-4"></i></button></div></article>`).join('');list.querySelectorAll('.archive-open').forEach(button=>button.addEventListener('click',()=>{const item=archive.find(x=>x.id===button.dataset.id);if(item){renderResult(item);showView('result')}}));list.querySelectorAll('.archive-delete').forEach(button=>button.addEventListener('click',()=>{if(confirm('Bu analiz sonucu arşivden silinsin mi?')){archive=archive.filter(x=>x.id!==button.dataset.id);saveArchive();renderDashboard()}}));lucide.createIcons();}
+    function setupFileInput(inputId,dropId,onFile){const input=document.getElementById(inputId),drop=document.getElementById(dropId);input.addEventListener('change',()=>onFile(input.files[0]||null));['dragenter','dragover'].forEach(name=>drop.addEventListener(name,event=>{event.preventDefault();drop.classList.add('drop-active')}));['dragleave','drop'].forEach(name=>drop.addEventListener(name,event=>{event.preventDefault();drop.classList.remove('drop-active')}));drop.addEventListener('drop',event=>{const file=event.dataTransfer.files[0];if(file){const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;onFile(file)}})}
+    setupFileInput('pdf-file','pdf-drop',file=>{pdfFile=file;document.getElementById('pdf-label').textContent=file?file.name:'PDF’yi seç veya buraya bırak';document.getElementById('pdf-detail').textContent=file?formatBytes(file.size):'Taranmış ve metin tabanlı PDF’ler desteklenir.';if(file&&!document.getElementById('exam-name').value)document.getElementById('exam-name').value=file.name.replace(/\.pdf$/i,'')});
+    setupFileInput('key-file','key-drop',file=>{keyFile=file;document.getElementById('key-label').textContent=file?file.name:'Cevap anahtarı ekle';document.getElementById('key-detail').textContent=file?formatBytes(file.size):'1–80 ve A–E eşleşmeleri doğrulanır.'});
+    document.getElementById('analysis-form').addEventListener('submit',async event=>{event.preventDefault();const errorBox=document.getElementById('form-error');errorBox.classList.add('hidden');try{validateFiles();setSubmitBusy(true);showView('processing');setProgress(3,'Güvenli yükleme hazırlanıyor','Yükleme bağlantıları oluşturuluyor.');const accessCode=document.getElementById('access-code').value;sessionStorage.setItem('ydtAccessCode',accessCode);const job=await postJson(API.create,{accessCode,examName:document.getElementById('exam-name').value.trim(),pdf:fileMeta(pdfFile),answerKey:keyFile?fileMeta(keyFile):null});await uploadWithTus(pdfFile,job.publicConfig,job.uploads.pdf,percent=>setProgress(5+Math.round(percent*.35),'PDF yükleniyor',`Dosyanın %${percent} kadarı güvenli depoya ulaştı.`));if(keyFile&&job.uploads.answerKey){setProgress(42,'Cevap anahtarı yükleniyor','XLSX/CSV doğrulama için hazırlanıyor.');await uploadWithTus(keyFile,job.publicConfig,job.uploads.answerKey)}sessionStorage.setItem(ACTIVE_JOB_KEY,JSON.stringify({jobId:job.jobId,clientToken:job.clientToken,examName:document.getElementById('exam-name').value.trim(),createdAt:new Date().toISOString()}));setProgress(47,'Analiz sıraya alınıyor','Belge artık tarayıcıdan bağımsız olarak işlenecek.');await postJson(API.start,{jobId:job.jobId,clientToken:job.clientToken});await pollJob(job.jobId,job.clientToken)}catch(error){console.error(error);sessionStorage.removeItem(ACTIVE_JOB_KEY);showView('upload');errorBox.textContent=error.message||'Analiz başlatılamadı.';errorBox.classList.remove('hidden')}finally{setSubmitBusy(false)}});
+    function validateFiles(){if(!pdfFile)throw new Error('Lütfen bir PDF seçin.');if(pdfFile.type!=='application/pdf'&&!/\.pdf$/i.test(pdfFile.name))throw new Error('Yalnızca PDF kabul edilir.');if(pdfFile.size>50*1024*1024)throw new Error('PDF en fazla 50 MB olabilir.');if(keyFile&&(!/\.(xlsx|csv)$/i.test(keyFile.name)||keyFile.size>2*1024*1024))throw new Error('Cevap anahtarı XLSX/CSV olmalı ve 2 MB’ı geçmemelidir.')}
+    function fileMeta(file){return{fileName:file.name,fileSize:file.size,mimeType:file.type||'application/octet-stream'}}
+    function setSubmitBusy(busy){document.getElementById('submit-btn').disabled=busy}
+    async function postJson(url,body){const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let data={};try{data=await response.json()}catch{}if(!response.ok)throw new Error(data.error||`Sunucu hatası (${response.status})`);return data}
+    function uploadWithTus(file,config,spec,onProgress=()=>{}){return new Promise((resolve,reject)=>{const endpoint=`${(config.storageUrl||config.url).replace(/\/$/,'')}/storage/v1/upload/resumable`;const upload=new tus.Upload(file,{endpoint,retryDelays:[0,3000,5000,10000,20000],chunkSize:6*1024*1024,uploadDataDuringCreation:true,removeFingerprintOnSuccess:true,headers:{authorization:`Bearer ${config.anonKey}`,apikey:config.anonKey,'x-signature':spec.token,'x-upsert':'false'},metadata:{bucketName:config.bucket,objectName:spec.path,contentType:file.type||'application/octet-stream',cacheControl:'3600'},onError:error=>reject(new Error(`Dosya yüklenemedi: ${error.message}`)),onProgress:(sent,total)=>onProgress(Math.round(sent/total*100)),onSuccess:()=>resolve()});upload.findPreviousUploads().then(previous=>{if(previous.length)upload.resumeFromPreviousUpload(previous[0]);upload.start()}).catch(reject)})}
+    async function pollJob(jobId,clientToken){clearTimeout(pollTimer);const data=await postJson(API.status,{jobId,clientToken});updateFromServerStatus(data);if(['completed','completed_with_warnings'].includes(data.status)){sessionStorage.removeItem(ACTIVE_JOB_KEY);const stored={id:data.id,examName:data.exam_name,createdAt:data.created_at,result:data.result};archive=archive.filter(x=>x.id!==stored.id);archive.unshift(stored);saveArchive();renderResult(stored);showView('result');return}if(data.status==='failed'){sessionStorage.removeItem(ACTIVE_JOB_KEY);throw new Error(data.error_message||'Analiz tamamlanamadı.')}await new Promise(resolve=>{pollTimer=setTimeout(resolve,3000)});return pollJob(jobId,clientToken)}
+    function updateFromServerStatus(data){const progress=Math.max(47,Number(data.progress)||0);let title='Belge okunuyor',message='Soru yapısı, bölümler ve cevap anahtarı görsel olarak inceleniyor.';if(progress>=65){title='80 soru doğrulanıyor';message='Eksik, yinelenen veya okunamayan sorular kontrol ediliyor.'}if(progress>=85){title='Eğitimsel puan hesaplanıyor';message='Altı boyut sabit ağırlıklarla ÖSYM çıpalarına bağlanıyor.'}setProgress(progress,title,message)}
+    function setProgress(value,title,message){const progress=Math.max(0,Math.min(100,value));document.getElementById('progress-bar').style.width=`${progress}%`;document.getElementById('progress-value').textContent=`${progress}%`;document.getElementById('processing-title').textContent=title;document.getElementById('processing-message').textContent=message;document.getElementById('progress-stage').textContent=progress<45?'Yükleme':progress<65?'Belge okuma':progress<85?'Doğrulama':'Puanlama';[['step-upload',progress>=5],['step-read',progress>=45],['step-check',progress>=65],['step-score',progress>=85]].forEach(([id,on])=>{document.getElementById(id).className=`rounded-lg px-2 py-2 ${on?'bg-mint text-teal':'bg-slate-100 text-slate-400'}`})}
+    function renderResult(item){const r=item.result,root=document.getElementById('result-root');const metrics=WEIGHTS.map(([label,weight,key])=>`<div><div class="mb-1.5 flex justify-between text-sm"><span class="font-bold">${label}</span><span class="font-extrabold">${r.scores[key]}/100</span></div><div class="h-2.5 overflow-hidden rounded-full bg-slate-100"><div class="metric-fill h-full rounded-full bg-teal" data-width="${r.scores[key]}%"></div></div><p class="mt-1 text-[11px] text-slate-400">Ağırlık: %${weight}</p></div>`).join('');const sections=(r.sectionAnalysis||[]).map(section=>`<div class="rounded-2xl border border-slate-200 p-4"><div class="flex items-start justify-between gap-3"><div><h4 class="font-bold">${escapeHtml(section.name)}</h4><p class="text-xs text-slate-400">${escapeHtml(section.questionRange)}</p></div><span class="display text-xl font-extrabold">${Math.round(section.score)}</span></div><p class="mt-3 text-sm leading-6 text-slate-600">${escapeHtml(section.rationale)}</p></div>`).join('');const hardest=(r.hardestQuestionTypes||[]).map(type=>`<li class="rounded-xl bg-slate-50 p-3"><div class="flex justify-between gap-3"><strong>${escapeHtml(type.type)}</strong><span class="font-extrabold text-coral">${Math.round(type.score)}</span></div><p class="mt-1 text-xs leading-5 text-slate-500">${escapeHtml(type.reason)}</p></li>`).join('');const warnings=(r.warnings||[]).map(warning=>`<li>${escapeHtml(warning)}</li>`).join('');root.innerHTML=`<div class="grid gap-6 lg:grid-cols-[.85fr_1.15fr]"><article class="panel rounded-3xl p-6 sm:p-8"><p class="text-xs font-bold uppercase tracking-[.18em] text-teal">Tahmini zorluk</p><h1 class="display mt-2 text-2xl font-extrabold">${escapeHtml(item.examName)}</h1><div class="mt-7 flex items-center gap-6"><div class="relative h-36 w-36 shrink-0"><svg viewBox="0 0 36 36" class="h-full w-full -rotate-90"><path d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831a15.9155 15.9155 0 0 1 0-31.831" fill="none" stroke="#e8efee" stroke-width="3"/><path class="score-ring" d="M18 2.0845a15.9155 15.9155 0 0 1 0 31.831a15.9155 15.9155 0 0 1 0-31.831" fill="none" stroke="#0f8b8d" stroke-width="3" stroke-linecap="round" stroke-dasharray="0,100" data-score="${r.difficultyIndex},100"/></svg><div class="absolute inset-0 grid place-items-center text-center"><span><strong class="display block text-4xl font-extrabold">${r.difficultyIndex}</strong><small class="font-bold text-slate-400">/ 100</small></span></div></div><div><span class="inline-block rounded-lg border px-3 py-1 text-sm font-bold ${labelTone(r.difficultyLabel)}">${escapeHtml(r.difficultyLabel)}</span><p class="mt-3 text-sm leading-6 text-slate-500">En yakın referans: <strong class="text-ink">${r.closestReference.year} ÖSYM (${r.closestReference.score})</strong></p><p class="mt-1 text-xs text-slate-400">Güven: %${r.confidence}</p></div></div><div class="mt-7 rounded-2xl bg-mint/70 p-4"><div class="flex justify-between text-sm font-bold"><span>Analiz kapsamı</span><span>${r.coverage.detectedQuestions}/80 soru</span></div><div class="mt-2 h-2 overflow-hidden rounded-full bg-white"><div class="h-full rounded-full bg-teal" style="width:${r.coverage.percentage}%"></div></div><p class="mt-2 text-xs text-ocean">Cevap anahtarı: ${r.answerKey?.detected||0}/80 • ${r.answerKey?.source==='uploaded'?'Harici dosya':'PDF içinden'}</p></div><p class="mt-6 text-sm leading-7 text-slate-600">${escapeHtml(r.educationalComment)}</p>${warnings?`<div class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4"><strong class="text-sm text-amber-800">Kontrol notları</strong><ul class="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-800">${warnings}</ul></div>`:''}</article><article class="panel rounded-3xl p-6 sm:p-8"><div class="flex items-end justify-between"><div><p class="text-xs font-bold uppercase tracking-[.18em] text-teal">Altı boyut</p><h2 class="display mt-1 text-2xl font-extrabold">Zorluk profili</h2></div><button data-nav-result-method class="text-xs font-bold text-teal hover:text-ocean">Yöntemi gör</button></div><div class="mt-6 space-y-5">${metrics}</div></article></div><div class="mt-6 grid gap-6 lg:grid-cols-[1.25fr_.75fr]"><article class="panel rounded-3xl p-6"><h2 class="display text-xl font-extrabold">Bölüm analizi</h2><div class="mt-5 grid gap-3 sm:grid-cols-2">${sections||'<p class="text-sm text-slate-500">Bölüm verisi bulunamadı.</p>'}</div></article><article class="panel rounded-3xl p-6"><h2 class="display text-xl font-extrabold">En zor soru türleri</h2><ul class="mt-5 space-y-3">${hardest||'<li class="text-sm text-slate-500">Veri bulunamadı.</li>'}</ul><div class="mt-6 border-t border-slate-200 pt-5"><h3 class="font-bold">CEFR kelime profili</h3>${['b1','b2','c1','c2'].map(level=>`<div class="mt-3 flex items-center gap-3"><span class="w-7 text-xs font-bold uppercase">${level}</span><div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div class="h-full bg-ocean" style="width:${r.cefrProfile[level]}%"></div></div><span class="w-10 text-right text-xs font-bold">%${r.cefrProfile[level]}</span></div>`).join('')}</div></article></div>`;root.querySelector('[data-nav-result-method]')?.addEventListener('click',()=>showView('method'));requestAnimationFrame(()=>{root.querySelector('.score-ring').setAttribute('stroke-dasharray',root.querySelector('.score-ring').dataset.score);root.querySelectorAll('.metric-fill').forEach(bar=>bar.style.width=bar.dataset.width)});lucide.createIcons()}
+    function renderMethod(){document.getElementById('weight-list').innerHTML=WEIGHTS.map(([label,weight])=>`<div><div class="mb-1 flex justify-between text-sm font-bold"><span>${label}</span><span>%${weight}</span></div><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-teal" style="width:${weight*4}%"></div></div></div>`).join('');document.getElementById('reference-list').innerHTML=REFERENCES.map(([year,score,label])=>`<div class="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3"><div><strong>${year} ÖSYM YDT</strong><span class="ml-2 text-xs text-slate-400">${label}</span></div><span class="display text-xl font-extrabold">${score}</span></div>`).join('')}
+    async function resumeActiveJob(){const raw=sessionStorage.getItem(ACTIVE_JOB_KEY);if(!raw)return;try{const job=JSON.parse(raw);showView('processing');setProgress(50,'Devam eden analiz bulundu','Sunucudaki işlem durumu yeniden bağlanıyor.');const status=await postJson(API.status,{jobId:job.jobId,clientToken:job.clientToken});if(status.status==='awaiting_upload')await postJson(API.start,{jobId:job.jobId,clientToken:job.clientToken});await pollJob(job.jobId,job.clientToken)}catch(error){console.error(error);sessionStorage.removeItem(ACTIVE_JOB_KEY);showView('dashboard')}}
+    document.getElementById('access-code').value=sessionStorage.getItem('ydtAccessCode')||'';renderDashboard();renderMethod();lucide.createIcons();resumeActiveJob();
+  </script>
 </body>
 </html>

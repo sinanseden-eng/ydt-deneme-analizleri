@@ -3,3 +3,29 @@
 
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[functions."cleanup-scheduled"]
+  schedule = "@daily"
+
+[[redirects]]
+  from = "/api/create-job"
+  to = "/.netlify/functions/create-job"
+  status = 200
+
+[[redirects]]
+  from = "/api/start-analysis"
+  to = "/.netlify/functions/analyze-background"
+  status = 200
+
+[[redirects]]
+  from = "/api/job-status"
+  to = "/.netlify/functions/job-status"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

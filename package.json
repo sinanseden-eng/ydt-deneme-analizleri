@@ -1,16 +1,19 @@
 {
   "name": "ydt-ai-analyzer",
-  "version": "1.0.0",
-  "description": "YDT AI Analyzer Backend",
-  "main": "server.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Calibrated YDT difficulty analysis with Netlify, Supabase and Gemini",
   "scripts": {
-    "start": "node server.js"
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1",
-    "node-fetch": "^2.7.0"
+    "@supabase/supabase-js": "^2.57.4",
+    "exceljs": "^4.4.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }
