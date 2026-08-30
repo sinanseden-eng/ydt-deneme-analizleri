@@ -356,9 +356,9 @@
                 return;
             }
 
-            // Dosya boyutu kontrolü (Örn: 10MB sınırı)
-            if (file.size > 10 * 1024 * 1024) {
-                errorMsg.textContent = "Dosya boyutu çok büyük (Max: 10MB). Lütfen daha küçük bir dosya yükleyin.";
+            // Dosya boyutu kontrolü (50MB sınırı olarak güncellendi)
+            if (file.size > 50 * 1024 * 1024) {
+                errorMsg.textContent = "Dosya boyutu çok büyük (Max: 50MB). Lütfen daha küçük bir dosya yükleyin.";
                 errorBox.classList.remove('hidden');
                 resetFileSelection(event);
                 return;
