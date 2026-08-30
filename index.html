@@ -6,12 +6,8 @@
     <title>YDT AI Analizörü - Netlify App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
-        // PDF.js worker'ı yapılandırıyoruz
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        
         tailwind.config = {
             theme: {
                 extend: {
@@ -155,14 +151,14 @@
 
                     <!-- PDF Drag and Drop Area -->
                     <div class="mb-6">
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Deneme PDF Dosyası</label>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Deneme PDF Dosyası (Taranmış PDF'ler Desteklenir)</label>
                         <div id="drag-area" class="drag-area flex flex-col items-center justify-center p-8 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors h-48 relative">
-                            <input type="file" id="pdf-upload" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="handleFileSelect(event)">
+                            <input type="file" id="pdf-upload" accept=".pdf,image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="handleFileSelect(event)">
                             
                             <div id="upload-content" class="text-center pointer-events-none">
                                 <i data-lucide="file-text" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
-                                <p class="text-slate-600 font-medium mb-1">PDF dosyasını buraya sürükleyin veya <span class="text-indigo-600">tıklayın</span></p>
-                                <p class="text-xs text-slate-400">Yalnızca YDT denemelerini içeren .pdf formatı desteklenir</p>
+                                <p class="text-slate-600 font-medium mb-1">PDF veya Resim dosyasını buraya sürükleyin veya <span class="text-indigo-600">tıklayın</span></p>
+                                <p class="text-xs text-slate-400">YDT denemelerini içeren .pdf, .jpg veya .png formatları desteklenir</p>
                             </div>
                             
                             <div id="file-info" class="hidden text-center pointer-events-none w-full px-4">
@@ -283,7 +279,8 @@
 
         let exams = [];
         let pendingExam = null;
-        let extractedText = "";
+        let fileBase64 = null;
+        let fileMimeType = null;
 
         // Netlify Backend Endpoint'i (Serverless Function)
         const API_URL = '/.netlify/functions/analyze'; 
@@ -351,8 +348,17 @@
             
             if (!file) return;
 
-            if (file.type !== 'application/pdf') {
-                errorMsg.textContent = "Lütfen sadece PDF (.pdf) formatında bir dosya yükleyin.";
+            const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+            if (!validTypes.includes(file.type)) {
+                errorMsg.textContent = "Lütfen sadece PDF (.pdf) veya Resim (.jpg, .png) formatında bir dosya yükleyin.";
+                errorBox.classList.remove('hidden');
+                resetFileSelection(event);
+                return;
+            }
+
+            // Dosya boyutu kontrolü (Örn: 10MB sınırı)
+            if (file.size > 10 * 1024 * 1024) {
+                errorMsg.textContent = "Dosya boyutu çok büyük (Max: 10MB). Lütfen daha küçük bir dosya yükleyin.";
                 errorBox.classList.remove('hidden');
                 resetFileSelection(event);
                 return;
@@ -369,16 +375,17 @@
             // Automatically fill the exam name if it's empty
             const nameInput = document.getElementById('upload-exam-name');
             if(!nameInput.value) {
-                nameInput.value = file.name.replace('.pdf', '');
+                nameInput.value = file.name.replace(/\.[^/.]+$/, ""); // Uzantıyı gizle
             }
 
-            await extractTextFromPDF(file);
+            await prepareFileForUpload(file);
         }
 
         function resetFileSelection(e) {
             if(e) { e.preventDefault(); e.stopPropagation(); }
             fileInput.value = '';
-            extractedText = "";
+            fileBase64 = null;
+            fileMimeType = null;
             document.getElementById('upload-content').classList.remove('hidden');
             document.getElementById('file-info').classList.add('hidden');
             startAnalysisBtn.disabled = true;
@@ -386,8 +393,8 @@
             document.getElementById('pdf-progress-container').classList.add('hidden');
         }
 
-        // --- PDF Processing ---
-        async function extractTextFromPDF(file) {
+        // --- File Preparation (Base64 Conversion) ---
+        async function prepareFileForUpload(file) {
             const progressContainer = document.getElementById('pdf-progress-container');
             const progressBar = document.getElementById('pdf-progress-bar');
             const progressText = document.getElementById('pdf-percentage');
@@ -396,58 +403,48 @@
             progressContainer.classList.remove('hidden');
             startAnalysisBtn.disabled = true;
             startAnalysisBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            statusText.textContent = "PDF Hazırlanıyor...";
-            progressBar.style.width = "0%";
-            progressText.textContent = "0%";
+            statusText.textContent = "Dosya Yapay Zeka İçin Hazırlanıyor...";
+            progressBar.style.width = "50%";
+            progressText.textContent = "50%";
             
             try {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                let fullText = "";
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
                 
-                statusText.textContent = "Sayfalar Taranıyor...";
-                
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(" ");
-                    fullText += pageText + "\n\n";
+                reader.onload = () => {
+                    fileBase64 = reader.result;
+                    fileMimeType = file.type;
                     
-                    const percent = Math.round((i / pdf.numPages) * 100);
-                    progressBar.style.width = `${percent}%`;
-                    progressText.textContent = `${percent}%`;
-                }
-
-                extractedText = fullText.trim();
-                
-                if (extractedText.length < 150) {
-                     throw new Error("PDF'den yeterli metin okunamadı (Görsel ağırlıklı veya taranmış bir PDF olabilir).");
-                }
-                
-                statusText.textContent = "Okuma Tamamlandı!";
-                statusText.classList.replace('text-indigo-600', 'text-emerald-600');
-                progressBar.classList.replace('bg-indigo-500', 'bg-emerald-500');
-                
-                setTimeout(() => {
-                    progressContainer.classList.add('hidden');
-                    statusText.classList.replace('text-emerald-600', 'text-indigo-600');
-                    progressBar.classList.replace('bg-emerald-500', 'bg-indigo-500');
+                    progressBar.style.width = "100%";
+                    progressText.textContent = "100%";
+                    statusText.textContent = "Dosya Hazır!";
+                    statusText.classList.replace('text-indigo-600', 'text-emerald-600');
+                    progressBar.classList.replace('bg-indigo-500', 'bg-emerald-500');
                     
-                    // Enable start button
-                    startAnalysisBtn.disabled = false;
-                    startAnalysisBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                }, 1500);
+                    setTimeout(() => {
+                        progressContainer.classList.add('hidden');
+                        statusText.classList.replace('text-emerald-600', 'text-indigo-600');
+                        progressBar.classList.replace('bg-emerald-500', 'bg-indigo-500');
+                        
+                        // Enable start button
+                        startAnalysisBtn.disabled = false;
+                        startAnalysisBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    }, 1000);
+                };
+                
+                reader.onerror = (error) => {
+                    throw new Error("Dosya okuma hatası.");
+                };
                 
             } catch (error) {
-                console.error("PDF Okuma Hatası:", error);
+                console.error("Dosya Hazırlama Hatası:", error);
                 const errorBox = document.getElementById('input-error');
-                document.getElementById('input-error-msg').textContent = error.message || "PDF okunurken bir hata oluştu. Taranmış sayfalar yerine dijital kopyalar deneyin.";
+                document.getElementById('input-error-msg').textContent = error.message || "Dosya hazırlanırken bir hata oluştu.";
                 errorBox.classList.remove('hidden');
                 resetFileSelection();
                 progressContainer.classList.add('hidden');
             }
         }
-
 
         // --- App Logic ---
         function loadExams() {
@@ -490,17 +487,23 @@
             
             if(!examName) examName = "İsimsiz YDT Denemesi";
 
-            if(!extractedText || extractedText.length < 150) {
-                errorMsg.textContent = "Önce analiz edilecek geçerli bir PDF dosyası yüklemelisiniz.";
+            if(!fileBase64) {
+                errorMsg.textContent = "Önce analiz edilecek geçerli bir dosya yüklemelisiniz.";
                 errorBox.classList.remove('hidden');
                 return;
             }
 
             errorBox.classList.add('hidden');
             switchView('processing');
+            
+            // Kullanıcıya bilgi ver
+            document.getElementById('processing-text').textContent = "Yapay Zeka Taranmış Belgeyi Okuyor. (Görsel analiz 20-30 saniye sürebilir, lütfen bekleyin...)";
 
-            // Payload for the Netlify Backend
-            const payload = { text: extractedText };
+            // Payload for the Netlify Backend (Base64 Data)
+            const payload = { 
+                pdfData: fileBase64,
+                mimeType: fileMimeType
+            };
 
             try {
                 const response = await fetch(API_URL, {
