@@ -1,8 +1,8 @@
 {
   "name": "ydt-ai-analyzer",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Calibrated YDT difficulty analysis with Netlify, Supabase and Gemini",
+  "description": "Calibrated YDT difficulty analysis with Netlify, Cloudflare R2 and Gemini",
   "scripts": {
     "test": "node --test"
   },
@@ -10,7 +10,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
+    "@aws-sdk/client-s3": "^3.883.0",
+    "@aws-sdk/s3-request-presigner": "^3.883.0",
     "exceljs": "^4.4.0"
   },
   "overrides": {

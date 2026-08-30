@@ -1,6 +1,6 @@
 "use strict";
 
-const { requireEnv } = require("./supabase");
+const { requireEnv } = require("./r2");
 const { formatAnswerKey } = require("./answer-key");
 
 const API_ROOT = "https://generativelanguage.googleapis.com";

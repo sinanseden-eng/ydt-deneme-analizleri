@@ -1,40 +1,54 @@
 "use strict";
 
-const { getAdminClient, getBucket } = require("./_shared/supabase");
+const {
+  deleteKeys, getJob, jobObjectKey, listObjects, lockObjectKey,
+} = require("./_shared/r2");
 
 exports.handler = async function handler() {
-  const supabase = getAdminClient();
-  const bucket = getBucket();
-  const staleUploadCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const oldResultCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const staleUploadCutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const oldResultCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  let staleUploadsRemoved = 0;
+  let oldJobsRemoved = 0;
 
   try {
-    const { data: staleJobs, error: staleError } = await supabase.from("analysis_jobs")
-      .select("id,file_path,key_path")
-      .in("status", ["awaiting_upload", "processing"])
-      .lt("updated_at", staleUploadCutoff);
-    if (staleError) throw staleError;
+    const uploads = await listObjects("uploads/");
+    const staleUploadKeys = uploads
+      .filter((object) => new Date(object.LastModified || 0).getTime() < staleUploadCutoff)
+      .map((object) => object.Key);
+    await deleteKeys(staleUploadKeys);
+    staleUploadsRemoved = staleUploadKeys.length;
 
-    for (const job of staleJobs || []) {
-      const paths = [job.file_path, job.key_path].filter(Boolean);
-      if (paths.length) {
-        const { error } = await supabase.storage.from(bucket).remove(paths);
-        if (error) console.warn(`Eski yükleme silinemedi (${job.id}):`, error.message);
+    const jobObjects = await listObjects("jobs/");
+    for (const object of jobObjects) {
+      const match = String(object.Key || "").match(/^jobs\/([0-9a-f-]{36})\.json$/i);
+      if (!match) continue;
+      const jobId = match[1];
+      try {
+        const record = await getJob(jobId);
+        if (!record) continue;
+        const job = record.job;
+        const updatedAt = new Date(job.updated_at || job.created_at || 0).getTime();
+        const isStaleActive = ["awaiting_upload", "processing"].includes(job.status)
+          && updatedAt < staleUploadCutoff;
+        const isOldResult = ["completed", "completed_with_warnings", "failed"].includes(job.status)
+          && updatedAt < oldResultCutoff;
+        if (!isStaleActive && !isOldResult) continue;
+        await deleteKeys([
+          job.file_path,
+          job.key_path,
+          jobObjectKey(jobId),
+          lockObjectKey(jobId),
+        ]);
+        oldJobsRemoved += 1;
+      } catch (error) {
+        console.warn(`R2 iş kaydı temizlenemedi (${jobId}):`, error.message);
       }
     }
 
-    if (staleJobs?.length) {
-      const { error } = await supabase.from("analysis_jobs").delete()
-        .in("id", staleJobs.map((job) => job.id));
-      if (error) throw error;
-    }
-
-    const { error: oldResultError } = await supabase.from("analysis_jobs").delete()
-      .in("status", ["completed", "completed_with_warnings", "failed"])
-      .lt("updated_at", oldResultCutoff);
-    if (oldResultError) throw oldResultError;
-
-    return { statusCode: 200, body: JSON.stringify({ staleUploadsRemoved: staleJobs?.length || 0 }) };
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ staleUploadsRemoved, oldJobsRemoved }),
+    };
   } catch (error) {
     console.error("Zamanlanmış temizlik hatası:", error.message);
     return { statusCode: 500, body: JSON.stringify({ error: "Temizlik tamamlanamadı." }) };

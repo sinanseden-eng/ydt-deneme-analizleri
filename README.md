@@ -1,48 +1,39 @@
 # YDT Difficulty Analyzer
 
-A Netlify-hosted YDT analysis dashboard that uploads PDFs directly to private
-Supabase Storage, analyses them with Gemini, and calibrates the result against
-the 2022-2026 ÖSYM YDT reference set.
+A Netlify-hosted YDT analysis dashboard using private Cloudflare R2 storage and
+Gemini native PDF analysis. Results are calibrated against the 2022-2026 ÖSYM
+YDT reference set.
 
-## What changed in version 2
+## Architecture
 
-- PDFs up to 50 MB no longer pass through Netlify's request body.
-- Uploads use short-lived, path-specific Supabase tokens.
-- Analysis runs as a Netlify Background Function.
-- Uploaded PDFs and answer keys are deleted after processing.
-- A daily cleanup removes abandoned uploads after 24 hours and old job records after 30 days.
-- XLSX and CSV answer keys are supported.
-- Every result reports question and answer coverage.
-- Completeness is derived from 80 unique question-audit records, rather than a model-reported total.
-- Difficulty uses fixed, auditable educational weights.
-- The result is labelled as predicted difficulty, not observed student difficulty.
+1. A Netlify function validates the request and creates a 15-minute R2 upload URL.
+2. The browser uploads the PDF directly to a private R2 bucket (maximum 50 MB).
+3. A Netlify Background Function reads the PDF from R2 and sends it to Gemini.
+4. R2 stores a small private JSON job record containing progress and the derived result.
+5. The source PDF and optional answer key are deleted immediately after processing.
+6. A daily cleanup deletes abandoned uploads after 24 hours and job records after 30 days.
 
-## 1. Supabase setup
+No Supabase project or public storage bucket is required.
 
-Create a Supabase project, open **SQL Editor**, and run:
+## Setup
 
-`supabase/migrations/202608300001_ydt_analysis.sql`
+Follow [R2_SETUP.md](R2_SETUP.md) for the complete Cloudflare and Netlify setup.
 
-This creates a private `ydt-uploads` bucket and a service-only
-`analysis_jobs` table. Do not add public policies to either resource.
+Required Netlify environment variables:
 
-## 2. Netlify environment variables
-
-Add these variables in **Project configuration > Environment variables**:
-
-| Variable | Value |
+| Variable | Purpose |
 | --- | --- |
+| `R2_ACCOUNT_ID` | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | Bucket-limited R2 access key |
+| `R2_SECRET_ACCESS_KEY` | Bucket-limited R2 secret key |
+| `R2_BUCKET_NAME` | `ydt-uploads` |
 | `GEMINI_API_KEY` | Google AI Studio API key |
 | `GEMINI_MODEL` | `gemini-3.7-flash` |
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_ANON_KEY` | Supabase anon/publishable key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key; never expose it in the browser |
-| `SUPABASE_STORAGE_BUCKET` | `ydt-uploads` |
-| `APP_ACCESS_CODE` | A private teacher access code for controlling API costs |
+| `APP_ACCESS_CODE` | Private teacher access code |
 
-After saving variables, trigger a new Netlify deployment.
+Never commit real keys to GitHub. `.env.example` contains names only.
 
-## 3. Local checks
+## Local checks
 
 ```sh
 npm install
@@ -54,9 +45,9 @@ The static interface is `index.html`. Netlify functions are under
 
 ## Analysis method
 
-The server calculates the final score from six Gemini-derived dimensions:
+The final predicted-difficulty score uses six fixed dimensions:
 
-- vocabulary: 20%
+- vocabulary and CEFR: 20%
 - grammar and syntax: 15%
 - reading and inference: 25%
 - question skills: 15%
@@ -64,7 +55,8 @@ The server calculates the final score from six Gemini-derived dimensions:
 - time pressure: 5%
 
 Bands are `Kolay` below 55, `Orta` from 55 to 60, `Orta-zor` from 61 to 67,
-and `Zor` from 68 upward. The current anchors are ÖSYM 2022 (55), 2023 (57),
-2024 (61), 2025 (69), and 2026 (58).
+and `Zor` from 68 upward. Anchors are ÖSYM 2022 (55), 2023 (57), 2024 (61),
+2025 (69), and 2026 (58).
 
-The application stores derived results, not reproduced question content.
+Completeness is calculated from 80 unique question-audit records. The stored
+report contains derived measurements, not reproduced question text.
