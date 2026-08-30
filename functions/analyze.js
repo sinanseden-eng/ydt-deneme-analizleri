@@ -1,21 +1,21 @@
 exports.handler = async function (event, context) {
+  // Sadece POST isteklerine izin veriyoruz
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Yalnızca POST isteklerine izin verilir" };
   }
 
   try {
     const bodyData = JSON.parse(event.body);
-    const { text, pdfData, mimeType } = bodyData;
+    const { text, images } = bodyData;
     
-    // Hem metin hem de PDF verisi yoksa hata ver
-    if ((!text || text.length < 50) && !pdfData) {
+    // Hem metin hem de resim verisi yoksa hata ver
+    if ((!text || text.length < 5) && (!images || images.length === 0)) {
         return { 
             statusCode: 400, 
-            body: JSON.stringify({ error: "Lütfen analiz için geçerli bir metin veya PDF dosyası gönderin." }) 
+            body: JSON.stringify({ error: "Lütfen analiz için geçerli bir metin veya PDF/Resim dosyası gönderin." }) 
         };
     }
 
-    // Netlify ortam değişkenlerinden gizli API anahtarını alıyoruz
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return {
@@ -24,21 +24,20 @@ exports.handler = async function (event, context) {
       };
     }
 
-    // YDT Analiz Promptu (Güvenlik için backend'de saklanıyor)
     const systemPrompt = `Sen uzman bir YDT (Yabancı Dil Testi) ve İngilizce eğitim analistisin.
-    Görev: Sana verilen metni veya belgeyi incelemek ve zorluk derecesini analiz etmektir. Belge taranmış bir PDF veya resim olabilir, içeriğini dikkatle oku.
+    Görev: Sana verilen metni veya belge sayfalarını incelemek ve zorluk derecesini analiz etmektir. 
     KURALLAR:
-    1. Önce içeriğin gerçekten bir İngilizce testi, makale veya YDT denemesi olup olmadığını kontrol et. Eğer Türkçe bir şiir, ilgisiz bir makale veya çok kısa saçma bir metinse "isValid" değerini false yap ve "errorMessage" kısmına neden reddettiğini kibarca açıkla (Örn: "Bu metin YDT soru formatına uymuyor.").
-    2. Eğer metin İngilizce bir test/deneme ise "isValid" değerini true yap.
-    3. Metni analiz et ve şu 4 kategori için 1.0 ile 10.0 arasında (örn: 7.5) zorluk puanı ver:
-       - vocab: Kelime dağarcığı zorluğu (CEFR B2/C1 yoğunluğu)
-       - grammar: Dilbilgisi ve cümle yapıları karmaşıklığı
-       - reading: Okuma parçalarının zorluğu
+    1. Önce içeriğin gerçekten bir İngilizce testi, makale veya YDT denemesi olup olmadığını kontrol et. Eğer Türkçe bir şiir, ilgisiz bir belge, çok kısa anlamsız bir metin veya İngilizce dışı bir dilse "isValid" değerini false yap ve "errorMessage" kısmına neden reddettiğini kibarca açıkla.
+    2. Eğer metin/belge İngilizce bir test veya deneme ise "isValid" değerini true yap.
+    3. Metni analiz et ve şu 4 kategori için 1.0 ile 10.0 arasında (örn: 7.5, 8.2) zorluk puanı ver:
+       - vocab: Kelime dağarcığı zorluğu (CEFR B2/C1 yoğunluğu, phrasal verbs)
+       - grammar: Dilbilgisi, tense ve cümle yapıları karmaşıklığı
+       - reading: Okuma parçalarının zorluğu ve paragraf uzunlukları
        - skills: Çeviri, diyalog, anlamca en yakın cümle gibi kısımların zorluğu.
     4. Bu 4 puanı göz önünde bulundurarak "overallScore" hesapla.
-    5. "marketEq" alanına Türkiye'deki hangi yayınlara denk geldiğini yaz.
+    5. "marketEq" alanına Türkiye'deki hangi yayınlara (ÖSYM, Özdebir, YDS Publishing, Akın Dil vb.) denk geldiğini veya zorluk kıyaslamasını yaz.
     6. "hardestSection" alanına en zor kategori adını (Türkçe) yaz.
-    7. "aiComment" alanına motive edici yorum yaz.`;
+    7. "aiComment" alanına öğrenci için motive edici ve yapıcı bir değerlendirme yorumu yaz.`;
 
     const generationConfig = {
       responseMimeType: "application/json",
@@ -65,23 +64,24 @@ exports.handler = async function (event, context) {
       }
     };
 
-    // Google Gemini API'ye İstek Atma
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-    
-    // Request Payload'ını dinamik olarak oluşturuyoruz
     let payloadParts = [];
     
-    // Eğer PDF verisi (Base64) geldiyse, part olarak ekle
-    if (pdfData && mimeType) {
-        payloadParts.push({
-            inlineData: {
-                data: pdfData.split(',')[1], // "data:application/pdf;base64," kısmını at
-                mimeType: mimeType
-            }
+    // Eğer frontend'den sıkıştırılmış resimler (sayfalar) geldiyse bunları ekle
+    if (images && images.length > 0) {
+        images.forEach(base64Str => {
+            // "data:image/jpeg;base64," kısmını atarak sadece raw data'yı alıyoruz
+            const rawData = base64Str.includes(',') ? base64Str.split(',')[1] : base64Str;
+            payloadParts.push({
+                inlineData: {
+                    data: rawData,
+                    mimeType: "image/jpeg"
+                }
+            });
         });
-        payloadParts.push({ text: "Analiz Edilecek Belge yukarıdadır. Lütfen taranmış sayfaları dikkatlice oku ve analiz et." });
+        payloadParts.push({ text: "Analiz edilecek deneme sayfaları yukarıdadır. Lütfen sayfaları dikkatlice oku ve talimatlara göre analiz et." });
     } 
-    // Eğer sadece düz metin geldiyse
+    // Sadece düz metin geldiyse
     else if (text) {
         payloadParts.push({ text: `Analiz Edilecek Metin:\n\n${text}` });
     }
@@ -99,16 +99,20 @@ exports.handler = async function (event, context) {
     });
 
     if (!response.ok) {
-      throw new Error("Gemini API'den olumsuz yanıt döndü.");
+        const errorText = await response.text();
+        console.error("Gemini API Error:", errorText);
+        throw new Error("Gemini API'den olumsuz yanıt döndü.");
     }
 
     const result = await response.json();
     
     if (result.candidates && result.candidates[0].content.parts[0].text) {
-        // AI'dan gelen JSON metnini direkt Frontend'e yansıt
         return {
             statusCode: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*" 
+            },
             body: result.candidates[0].content.parts[0].text
         };
     } else {
@@ -119,7 +123,7 @@ exports.handler = async function (event, context) {
     console.error("Fonksiyon Hatası:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Sunucu işleme sırasında bir hata oluştu." })
+      body: JSON.stringify({ error: "Sunucu işleme sırasında bir hata oluştu veya boyut sınırı aşıldı." })
     };
   }
 };
